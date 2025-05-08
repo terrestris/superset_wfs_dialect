@@ -14,6 +14,9 @@ class Connection:
     def close(self):
         pass
 
+    def rollback(self):
+        pass
+
 class Cursor:
     def __init__(self, base_url):
         self.builder = WfsQueryBuilder(base_url, version="2.0.0", prefer_json=False)
@@ -22,9 +25,9 @@ class Cursor:
         self._index = 0
 
     def execute(self, operation, parameters=None):
+        # raise ValueError(operation, str(parameters))
         operation = operation.strip()
         match = re.match(r"SELECT \* FROM ([\w:]+)(?: LIMIT (\d+))?", operation, re.IGNORECASE)
-
         if not match:
             raise ValueError("Nur 'SELECT * FROM layer [LIMIT n]' wird aktuell unterstützt.")
 
@@ -81,18 +84,18 @@ class Cursor:
             self.description = []
 
     def fetchall(self):
-        return self.data
+        return [tuple(row.values()) for row in self.data]
 
     def fetchone(self):
         if self._index >= len(self.data):
             return None
-        row = self.data[self._index]
+        row = tuple(self.data[self._index].values())
         self._index += 1
         return row
 
     def fetchmany(self, size=1):
         end = self._index + size
-        rows = self.data[self._index:end]
+        rows = [tuple(row.values()) for row in self.data[self._index:end]]
         self._index = min(end, len(self.data))
         return rows
 
@@ -103,4 +106,13 @@ def connect(*args, **kwargs):
     base_url = kwargs.get("base_url", "https://localhost/geoserver/ows")
     return Connection(base_url)
 
-connect.paramstyle = "qmark"
+class FakeDbApi:
+    paramstyle = "qmark"  # oder "qmark", falls du lieber ? als Platzhalter verwendest
+
+    def connect(self, *args, **kwargs):
+        return connect(*args, **kwargs)
+    
+    class Error(Exception):
+        pass
+
+dbapi = FakeDbApi()

@@ -23,8 +23,3 @@ class WfsQueryBuilder:
             params["outputFormat"] = "application/json"
 
         return f"{self.base_url}?{urllib.parse.urlencode(params)}"
-
-# Beispiel: Debug-Ausgabe
-if __name__ == "__main__":
-    builder = WfsQueryBuilder("https://geoportal.stadt-koeln.de/arcgis/services/basiskarten/adressen_stadtteil/MapServer/WFSServer")
-    print(builder.build_getfeature_url("adressen_stadtteil:Raderthal", max_features=5))

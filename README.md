@@ -14,6 +14,13 @@ pip install -e .
 python tests/test_query.py
 ```
 
+or:
+
+```bash
+cd ./superset_wfs_dialect/superset_wfs_dialect
+python test_wfs.py
+```
+
 Start superset with plugin:
 
 ```bash

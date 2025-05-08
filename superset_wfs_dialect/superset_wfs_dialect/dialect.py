@@ -1,5 +1,7 @@
 from sqlalchemy.engine.default import DefaultDialect
-from .base import connect
+from sqlalchemy.engine.url import URL
+from .base import dbapi
+import superset_wfs_dialect
 
 class WfsDialect(DefaultDialect):
     name = "wfs"
@@ -7,13 +9,23 @@ class WfsDialect(DefaultDialect):
     supports_alter = False
     supports_unicode_statements = True
 
-    dbapi = connect
-
     def create_connect_args(self, url):
-        return [], {}
+        scheme = "https"
+        host = url.host
+        port = f":{url.port}" if url.port else ""
+        path = f"/{url.database}" if url.database else ""
+
+        base_url = f"{scheme}://{host}{port}{path}"
+
+        return [], {"base_url": base_url}
+    
+    @classmethod
+    def dbapi(cls):
+        return superset_wfs_dialect
+
+    @classmethod
+    def import_dbapi(cls):
+        return dbapi
 
 from sqlalchemy.dialects import registry
 registry.register("wfs", "superset_wfs_dialect.dialect", "WfsDialect")
-
-assert hasattr(connect, "paramstyle"), "connect hat kein paramstyle!"
-assert not hasattr(connect(), "paramstyle"), "connect() sollte KEIN paramstyle haben"
