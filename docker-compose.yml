@@ -1,0 +1,16 @@
+services:
+  superset:
+    image: superset-with-wfs
+    container_name: superset
+    ports:
+      - 8088:8088
+    environment:
+      - SUPERSET_ENV=production
+      - PYTHONPATH=/app/pythonpath
+    volumes:
+      - superset_home:/app/superset_home
+      - ./superset_wfs_dialect/superset_wfs_dialect:/app/pythonpath/superset_wfs_dialect
+    restart: always
+
+volumes:
+  superset_home:
