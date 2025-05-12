@@ -4,12 +4,26 @@ SQLAlchemy dialect for OGC WFS as a Superset plugin.
 
 Checkout the project.
 
+## Prerequisites
+
+Create a virtual environment and install the required packages.
+
+```bash
+python3 -m venv venv
+source venv/bin/activate
+```
+
+or via VS-Code:
+
+https://code.visualstudio.com/docs/python/python-tutorial#_create-a-virtual-environment
+
+
+## Installation
+
 Run via terminal:
 
 ```bash
 cd ./superset_wfs_dialect # within the project root
-python3 -m venv venv
-source venv/bin/activate
 pip install -e .
 python tests/test_query.py
 ```
