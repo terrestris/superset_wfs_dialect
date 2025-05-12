@@ -2,7 +2,7 @@ FROM apache/superset:latest
 
 # Installiere benötigte Python-Abhängigkeiten
 USER root
-RUN pip install sqlalchemy requests
+RUN pip install sqlalchemy requests debugpy
 
 COPY superset_config.py /app/pythonpath/
 RUN chown -R superset:superset /app/pythonpath/superset_config.py
