@@ -3,10 +3,12 @@ import warnings
 import re
 import xml.etree.ElementTree as ET
 from .wfs_client import WfsQueryBuilder
+from owslib.wfs import WebFeatureService
 
 class Connection:
     def __init__(self, base_url="https://localhost/geoserver/ows"):
         self.base_url = base_url
+        self.wfs = WebFeatureService(url=base_url, version='2.0.0')
 
     def cursor(self):
         return Cursor(self.base_url)
@@ -19,26 +21,47 @@ class Connection:
 
 class Cursor:
     def __init__(self, base_url):
-        self.builder = WfsQueryBuilder(base_url, version="2.0.0", prefer_json=False)
+        # self.builder = WfsQueryBuilder(base_url, version="2.0.0")
         self.data = []
         self.description = None
         self._index = 0
 
+    # TODO use sqlpaser
     def execute(self, operation, parameters=None):
-        # raise ValueError(operation, str(parameters))
+        import re
+        import requests
+
         operation = operation.strip()
-        match = re.match(r"SELECT \* FROM ([\w:]+)(?: LIMIT (\d+))?", operation, re.IGNORECASE)
+
+        if operation.lower() == "select 1":
+            self.data = [{"dummy": 1}]
+            self.description = [("dummy", "int", None, None, None, None, True)]
+            return
+
+        match = re.match(
+            r'SELECT\s+(?P<columns>.+?)\s+FROM\s+(?P<schema>\w+)\."(?P<table>\w+)"(?:\s+GROUP BY\s+(?P<group>.+?))?(?:\s+LIMIT\s+(?P<limit>\d+))?',
+            operation,
+            re.IGNORECASE,
+        )
+
         if not match:
-            raise ValueError("Nur 'SELECT * FROM layer [LIMIT n]' wird aktuell unterstützt.")
+            raise ValueError(f"Nur 'SELECT * FROM schema.\"table\" [LIMIT n]' wird aktuell unterstützt. (Erhalten: {operation})")
 
-        layer_name = match.group(1)
-        limit = match.group(2)
-        limit = int(limit) if limit else None
+        schema = match.group("schema")
+        table = match.group("table")
+        columns_raw = match.group("columns")
+        limit = int(match.group("limit")) if match.group("limit") else None
 
-        url = self.builder.build_getfeature_url(layer_name, max_features=limit)
+        # Spalten extrahieren
+        columns = [c.strip('" ') for c in columns_raw.split(",")]
+
+        property_names = None if columns == ["*"] else columns
+
+        typename = f"{schema}:{table}"
+        url = self.builder.build_getfeature_url(typename, max_features=limit, property_names=property_names)
         print("Generierte WFS-URL:", url)
-        response = requests.get(url, verify=False)
 
+        response = requests.get(url)
         if response.status_code != 200:
             raise RuntimeError(f"Fehler beim Abrufen von WFS-Daten: {response.status_code}")
 
@@ -51,6 +74,8 @@ class Cursor:
         self._generate_description()
         self._index = 0
 
+
+    # TODO use gml/xml paser
     def _parse_gml(self, xml_text):
         ns = {
             "wfs": "http://www.opengis.net/wfs/2.0",
@@ -104,10 +129,11 @@ class Cursor:
 
 def connect(*args, **kwargs):
     base_url = kwargs.get("base_url", "https://localhost/geoserver/ows")
+    print(args, kwargs)
     return Connection(base_url)
 
 class FakeDbApi:
-    paramstyle = "qmark"  # oder "qmark", falls du lieber ? als Platzhalter verwendest
+    paramstyle = "pyformat"  # oder "qmark", falls du lieber ? als Platzhalter verwendest
 
     def connect(self, *args, **kwargs):
         return connect(*args, **kwargs)
