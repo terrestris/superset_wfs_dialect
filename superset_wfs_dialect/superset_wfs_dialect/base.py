@@ -1,4 +1,6 @@
+import sqlglot.expressions
 from owslib.wfs import WebFeatureService
+from owslib.fes2 import *
 from io import BytesIO
 import sqlglot
 import logging
@@ -65,10 +67,24 @@ class Cursor:
         limit_expr = ast.find(sqlglot.exp.Limit)
         limit = int(limit_expr.expression.name) if limit_expr else None
 
+        # Get Filter
+        where_expr = ast.find(sqlglot.exp.Where)
+        if where_expr:
+            filter = self._get_filter_from_expression(where_expr)
+            logger.debug("Filter: %s", filter)
+        else:
+            filter = None
+
         logger.info("Requesting WFS layer %s", typename)
 
+        # TODO fix filter
         wfs = self.connection.wfs
-        response: BytesIO = wfs.getfeature(typename=typename, maxfeatures=limit, propertyname=self.requested_columns)
+        response: BytesIO = wfs.getfeature(
+            typename=typename,
+            maxfeatures=limit,
+            propertyname=self.requested_columns,
+            filter=filter,
+        )
 
         try:
             xml_text = response.read().decode("utf-8")
@@ -86,6 +102,23 @@ class Cursor:
 
         self._generate_description()
         self._index = 0
+
+    def _get_filter_from_expression(self, where_expr: sqlglot.exp.Where):
+
+        if not isinstance(where_expr, sqlglot.exp.Where):
+            raise ValueError("Ungültige WHERE-Klausel")
+
+        filter = None
+
+        # Handle equality
+        if isinstance(where_expr.this, sqlglot.expressions.EQ):
+            propertyname = where_expr.this.this.name
+            literal = where_expr.this.args["expression"].name
+            filter = PropertyIsEqualTo(propertyname=propertyname, literal=literal)
+
+        #TODO handle other expressions
+
+        return filter
 
     def _parse_gml(self, xml_text: str) -> List[Dict[str, str]]:
         """Parse GML XML response into a list of feature dictionaries.
