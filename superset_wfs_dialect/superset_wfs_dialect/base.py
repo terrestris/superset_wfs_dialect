@@ -59,7 +59,7 @@ class Cursor:
         typename = table_expr.this.name if table_expr else None
 
         # Get property names
-        requested_columns = [col.alias_or_name for col in ast.expressions]
+        self.requested_columns = [col.alias_or_name for col in ast.expressions]
 
         # Get Limit
         limit_expr = ast.find(sqlglot.exp.Limit)
@@ -68,7 +68,7 @@ class Cursor:
         logger.info("Requesting WFS layer %s", typename)
 
         wfs = self.connection.wfs
-        response: BytesIO = wfs.getfeature(typename=typename, maxfeatures=limit, propertyname=requested_columns)
+        response: BytesIO = wfs.getfeature(typename=typename, maxfeatures=limit, propertyname=self.requested_columns)
 
         try:
             xml_text = response.read().decode("utf-8")
@@ -123,16 +123,15 @@ class Cursor:
             self.description = []
             return
 
-        first_row = self.data[0]
-        if getattr(self, 'requested_columns', ["*"]) == ["*"]:
+        if self.requested_columns == ["*"]:
+            # Bei SELECT * alle Spalten in der Reihenfolge wie sie kommen
             self.description = [
-                (key, type(value).__name__, None, None, None, None, True)
-                for key, value in first_row.items()
+                (col, "string", None, None, None, None, True) for col in self.data[0].keys()
             ]
         else:
+            # Sonst nur die angefragten Spalten in der richtigen Reihenfolge
             self.description = [
-                (col, type(first_row.get(col, "")).__name__, None, None, None, None, True)
-                for col in self.requested_columns
+                (col, "string", None, None, None, None, True) for col in self.requested_columns
             ]
 
     def _get_row_values(self, row: Dict[str, Any]) -> tuple:
