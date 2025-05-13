@@ -3,7 +3,6 @@ from sqlalchemy.engine.url import URL
 from .base import FakeDbApi
 import superset_wfs_dialect
 import logging
-import requests
 import xml.etree.ElementTree as ET
 from sqlalchemy import types as sqltypes
 

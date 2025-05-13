@@ -9,7 +9,8 @@ setup(
     install_requires=[
         "sqlalchemy>=1.4",
         "requests",
-        "OWSLib"
+        "OWSLib",
+        "sqlglot>=21.0.0"
     ],
     entry_points={
         "sqlalchemy.dialects": [
