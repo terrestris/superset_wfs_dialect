@@ -17,6 +17,11 @@ or via VS-Code:
 
 https://code.visualstudio.com/docs/python/python-tutorial#_create-a-virtual-environment
 
+:warning: Currently the setup requires a local installation of `owslib`. Checkout this branch
+https://github.com/KaiVolland/OWSLib/tree/arcgis-server-support and set the path in the `.env` file.
+
+```bash
+
 
 ## Installation
 
