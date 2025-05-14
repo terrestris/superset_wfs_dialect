@@ -2,7 +2,7 @@ FROM apache/superset:latest
 
 # Installiere benötigte Python-Abhängigkeiten
 USER root
-RUN pip install sqlalchemy requests sqlglot debugpy
+RUN pip install sqlalchemy requests sqlglot debugpy lxml
 
 # Setze Berechtigungen für /app/pythonpath und /app/owslib
 COPY superset_config.py /app/pythonpath/

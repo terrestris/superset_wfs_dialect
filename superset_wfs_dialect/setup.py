@@ -10,7 +10,8 @@ setup(
         "sqlalchemy>=1.4",
         "requests",
         "OWSLib",
-        "sqlglot>=21.0.0"
+        "sqlglot>=21.0.0",
+        "lxml"
     ],
     entry_points={
         "sqlalchemy.dialects": [
