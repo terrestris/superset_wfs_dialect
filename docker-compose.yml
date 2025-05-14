@@ -5,16 +5,24 @@ services:
       dockerfile: Dockerfile
     image: superset-with-wfs
     container_name: superset
+    cap_add:
+      - SYS_PTRACE
     ports:
       - 8088:8088
-      - 5678:5678  # Debug-Port
+      - 5678:5678
     environment:
       - SUPERSET_ENV=production
       - PYTHONPATH=/app/pythonpath
+    healthcheck:
+        test: ["CMD-SHELL", "curl -f http://127.0.0.1:8088/login/ || exit 1"]
+        interval: 30s
+        timeout: 10s
+        retries: 3
+        start_period: 90s
     volumes:
       - superset_home:/app/superset_home
       - ./superset_wfs_dialect/superset_wfs_dialect:/app/pythonpath/superset_wfs_dialect
-    restart: always
+      - ${OWSLIB_PATH}:/app/owslib
 
 volumes:
   superset_home:

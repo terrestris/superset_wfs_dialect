@@ -15,8 +15,10 @@ source venv/bin/activate
 
 or via VS-Code:
 
-https://code.visualstudio.com/docs/python/python-tutorial#_create-a-virtual-environment
+<https://code.visualstudio.com/docs/python/python-tutorial#_create-a-virtual-environment>
 
+:warning: Currently the setup requires a local installation of `owslib`. Checkout this branch
+<https://github.com/KaiVolland/OWSLib/tree/arcgis-server-support> and set the path in the `.env` file.
 
 ## Installation
 
@@ -38,8 +40,7 @@ python test_wfs.py
 Start superset with plugin:
 
 ```bash
-docker build -t superset-with-wfs .
-docker compose up -d
+docker compose up -d --build
 ```
 
 Open [http://localhost:8088/](http://localhost:8088/).
