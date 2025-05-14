@@ -11,6 +11,7 @@ setup(
         "requests",
         "OWSLib",
         "sqlglot>=21.0.0",
+        # TODO: Check if lxml installation is needed
         "lxml"
     ],
     entry_points={
