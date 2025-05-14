@@ -14,11 +14,11 @@ services:
       - SUPERSET_ENV=production
       - PYTHONPATH=/app/pythonpath
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8088/ || exit 1"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-      start_period: 40s
+        test: ["CMD-SHELL", "curl -f http://127.0.0.1:8088/login/ || exit 1"]
+        interval: 30s
+        timeout: 10s
+        retries: 3
+        start_period: 90s
     volumes:
       - superset_home:/app/superset_home
       - ./superset_wfs_dialect/superset_wfs_dialect:/app/pythonpath/superset_wfs_dialect
