@@ -1,3 +1,5 @@
+import requests
+import math
 import sqlglot.expressions
 from owslib.wfs import WebFeatureService
 from owslib.fes2 import *
@@ -98,6 +100,17 @@ class Cursor:
 
         # If we have an aggregation, we have to recursively call the WFS until all features are fetched
         # and then aggregate them in Python
+
+        # fetch as many features as possible with one request
+        server_side_maxfeatures = self._get_server_side_max_features(typename=typename)
+        if server_side_maxfeatures is not None:
+            limit = server_side_maxfeatures
+        else:
+            total_features = self._get_feature_count(typename=typename)
+            if total_features / limit > 100:
+                # reduce requests if there are too many features to never reach 100 requests
+                limit = self.round_up_to_nearest_power(total_features / 100)
+
         startindex = 0
         all_features = []
         logger.info("Fetching features for aggregation")
@@ -146,6 +159,72 @@ class Cursor:
         self.data = aggregated_data
         self._generate_description()
         self._index = 0
+
+    def round_up_to_nearest_power(n):
+        base = 10 ** math.floor(math.log10(n))
+        if n <= base:
+            return base
+        elif n <= 2 * base:
+            return 2 * base
+        elif n <= 5 * base:
+            return 5 * base
+        else:
+            return 10 * base
+
+    def _get_server_side_max_features(self, typename: str) -> int:
+        base_url = self.connection.base_url
+        url = f"{base_url}?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetCapabilities&typename={typename}"
+        requests.get(url)
+        response = requests.get(url)
+        if response.status_code == 200:
+            try:
+                capabilities_ast = ET.fromstring(response.text)
+            except ET.ParseError as e:
+                logger.error("Fehler beim Parsen der WFS-Antwort: %s", e)
+                raise ValueError("Fehler beim Parsen der WFS-Antwort")
+
+            # this is version 2.0.0 specific and could be different in 1.1.0
+            count_default_element = capabilities_ast.find(".//ows:Constraint[@name='CountDefault']/ows:DefaultValue", namespaces={"ows": "http://www.opengis.net/ows/1.1"})
+            if count_default_element is None:
+                logger.info("Fehler beim Abrufen der CountDefault-Elemente")
+                return None
+
+            count_default = int(count_default_element.text)
+            logger.info("Maximale Anzahl von Features: %s", count_default)
+            return count_default
+
+    def _get_feature_count(
+        self,
+        typename: str,
+        filterXml: Optional[str] = None,
+    ) -> int:
+        base_url = self.connection.base_url
+        url = f"{base_url}?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&typename={typename}&resultType=hits"
+
+        response = None
+        if filterXml:
+            respnse = requests.post(
+                url,
+                data=filterXml,
+                headers={"Content-Type": "application/xml"}
+            )
+        else:
+            response = requests.get(url)
+
+        if response.status_code == 200:
+            try:
+                count_ast = ET.fromstring(response.text)
+            except ET.ParseError as e:
+                logger.error("Fehler beim Parsen der WFS-Antwort: %s", e)
+                raise ValueError("Fehler beim Parsen der WFS-Antwort")
+
+            count = int(count_ast.attrib['numberMatched'])
+            logger.info("Anzahl der Merkmale: %s", count)
+            return count
+
+        else:
+            raise ValueError(f"Fehler beim Abrufen der Feature-Anzahl: {response.status_code}")
+
 
     def _get_features(
         self,
