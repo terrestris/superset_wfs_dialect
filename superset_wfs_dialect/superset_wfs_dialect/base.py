@@ -55,13 +55,20 @@ class Cursor:
         if not from_expr:
             raise ValueError("FROM-Klausel fehlt")
 
+        aggregation_info = self._get_aggregationinfo(ast)
+
         # Get typename
         table_expr = ast.find(sqlglot.exp.Table)
         typename = table_expr.this.name if table_expr else None
 
         # Get property names
-        if not ast.find(sqlglot.exp.Count):
-            self.requested_columns = [col.alias_or_name for col in ast.expressions]
+        self.requested_columns = [col.alias_or_name for col in ast.expressions]
+
+        # strip propname from aggregation wrapper AVG(propname), COUNT(propname), ...
+        self.requested_columns = [
+            col.split("(")[-1].split(")")[0] if "(" in col else col
+            for col in self.requested_columns
+        ]
 
         # Get Limit
         limit_expr = ast.find(sqlglot.exp.Limit)
@@ -78,19 +85,89 @@ class Cursor:
 
         logger.info("Requesting WFS layer %s", typename)
 
+        # If we have no aggregation, we can fetch the features directly
+        if not aggregation_info:
+            self.data = self._get_features(
+                typename=typename,
+                limit=limit,
+                filterXml=filterXml
+            )
+            self._generate_description()
+            self._index = 0
+            return
+
+        # If we have an aggregation, we have to recursively call the WFS until all features are fetched
+        # and then aggregate them in Python
+        startindex = 0
+        all_features = []
+        logger.info("Fetching features for aggregation")
+        while True:
+            # Fetch features with pagination
+            logger.info("Fetching features from %s to %s", startindex, startindex + limit)
+            features = self._get_features(
+                typename=typename,
+                limit=limit,
+                filterXml=filterXml,
+                startindex=startindex
+            )
+            if not features:
+                break
+            all_features.extend(features)
+            startindex += len(features)
+
+        # Perform aggregation in Python
+        agg_class = aggregation_info["class"]
+        agg_prop = aggregation_info["propertyname"]
+        agg_groupby = aggregation_info["groupby"]
+        grouped_data = {}
+
+        for feature in all_features:
+            group_value = feature.get(agg_groupby)
+            if group_value not in grouped_data:
+                grouped_data[group_value] = []
+            grouped_data[group_value].append(feature)
+        aggregated_data = []
+
+        for group_value, features in grouped_data.items():
+            if agg_class == sqlglot.exp.Avg:
+                agg_value = sum(float(f.get(agg_prop, 0)) for f in features) / len(features)
+            elif agg_class == sqlglot.exp.Sum:
+                agg_value = sum(float(f.get(agg_prop, 0)) for f in features)
+            elif agg_class == sqlglot.exp.Count:
+                agg_value = len(features)
+            elif agg_class == sqlglot.exp.Max:
+                agg_value = max(float(f.get(agg_prop, 0)) for f in features)
+            elif agg_class == sqlglot.exp.Min:
+                agg_value = min(float(f.get(agg_prop, 0)) for f in features)
+            else:
+                raise ValueError("Unsupported aggregation class")
+            aggregated_data.append({agg_groupby: group_value, agg_prop: agg_value})
+
+        self.data = aggregated_data
+        self._generate_description()
+        self._index = 0
+
+    def _get_features(
+        self,
+        typename: str,
+        limit: Optional[int] = None,
+        filterXml: Optional[str] = None,
+        startindex: Optional[int] = None,
+    ) -> List[Dict[str, Any]]:
         wfs = self.connection.wfs
         response: BytesIO = wfs.getfeature(
             typename=typename,
             maxfeatures=limit,
             propertyname=self.requested_columns,
             filter=filterXml,
+            startindex=startindex,
             method='POST' if filterXml else 'GET'
         )
 
         try:
             xml_text = response.read().decode("utf-8")
             logger.debug("WFS response: %s", xml_text)
-            self.data = self._parse_gml(xml_text)
+            return self._parse_gml(xml_text)
         except ET.ParseError as e:
             logger.error("Fehler beim Parsen der WFS-Antwort: %s", e)
             raise ValueError("Fehler beim Parsen der WFS-Antwort")
@@ -101,24 +178,56 @@ class Cursor:
             logger.error("Fehler beim Parsen der WFS-Antwort: %s", e)
             raise
 
-        self._generate_description()
-        self._index = 0
+    def _get_aggregationinfo(self, ast):
+        aggregation_classes = [
+            sqlglot.exp.Avg,
+            sqlglot.exp.Sum,
+            sqlglot.exp.Count,
+            # handle CountDistinct
+            sqlglot.exp.Max,
+            sqlglot.exp.Min
+        ]
 
-    supported_expressions = [
-        sqlglot.expressions.EQ,
-        sqlglot.expressions.NEQ,
-        sqlglot.expressions.GT,
-        sqlglot.expressions.GTE,
-        sqlglot.expressions.LT,
-        sqlglot.expressions.LTE,
-        sqlglot.expressions.And,
-        # sqlglot.expressions.In,
-        # sqlglot.expressions.Not,
-    ]
+        aggregation_class = None
+        aggregation_property = None
+
+        for cls in aggregation_classes:
+            aggregation = ast.find(cls)
+            if aggregation:
+                aggregation_class = cls
+                aggregation_property = aggregation.this.name
+                break
+
+        if not aggregation_class:
+            return None
+
+        groupby_property = ast.find(sqlglot.exp.Group).find(sqlglot.exp.Column).this.name
+
+        if not groupby_property:
+            raise ValueError("Aggregation ohne GROUP BY ist nicht unterstützt")
+
+        aggregation_info = {
+            "class": aggregation_class,
+            "propertyname": aggregation_property,
+            "groupby": groupby_property
+        }
+
+        return aggregation_info
 
     def _get_filter_from_expression(self, expression, is_root: bool = True) -> str:
+        supported_expressions = [
+            sqlglot.expressions.EQ,
+            sqlglot.expressions.NEQ,
+            sqlglot.expressions.GT,
+            sqlglot.expressions.GTE,
+            sqlglot.expressions.LT,
+            sqlglot.expressions.LTE,
+            sqlglot.expressions.And,
+            # sqlglot.expressions.In,
+            # sqlglot.expressions.Not,
+        ]
 
-        if not isinstance(expression, tuple(self.supported_expressions)):
+        if not isinstance(expression, tuple(supported_expressions)):
             raise ValueError("Unsupported filter expression:", expression.__class__.__name__)
 
         filter = None
