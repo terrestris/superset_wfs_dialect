@@ -1,14 +1,13 @@
 import sqlglot.expressions
 from owslib.wfs import WebFeatureService
 from owslib.fes2 import *
+from owslib.feature.wfs200 import WebFeatureService_2_0_0
 from io import BytesIO
 import sqlglot
 import logging
 import xml.etree.ElementTree as ET
 from typing import Optional, List, Dict, Any, Tuple
 import logging
-import xml.etree.ElementTree as ET
-from typing import Optional, List, Dict, Any, Tuple
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -16,7 +15,7 @@ logger = logging.getLogger(__name__)
 class Connection:
     def __init__(self, base_url="https://localhost/geoserver/ows"):
         self.base_url = base_url
-        self.wfs = WebFeatureService(url=base_url, version='2.0.0')
+        self.wfs: WebFeatureService_2_0_0 = WebFeatureService(url=base_url, version='2.0.0')
 
     def cursor(self):
         return Cursor(self)
@@ -61,7 +60,8 @@ class Cursor:
         typename = table_expr.this.name if table_expr else None
 
         # Get property names
-        self.requested_columns = [col.alias_or_name for col in ast.expressions]
+        if not ast.find(sqlglot.exp.Count):
+            self.requested_columns = [col.alias_or_name for col in ast.expressions]
 
         # Get Limit
         limit_expr = ast.find(sqlglot.exp.Limit)
@@ -70,20 +70,21 @@ class Cursor:
         # Get Filter
         where_expr = ast.find(sqlglot.exp.Where)
         if where_expr:
-            filter = self._get_filter_from_expression(where_expr)
-            logger.debug("Filter: %s", filter)
+            filter = self._get_filter_from_expression(where_expr.this)
+            filterXml = ET.tostring(filter.toXML()).decode("utf-8")
+            logger.debug("Filter: %s", filterXml)
         else:
-            filter = None
+            filterXml = None
 
         logger.info("Requesting WFS layer %s", typename)
 
-        # TODO fix filter
         wfs = self.connection.wfs
         response: BytesIO = wfs.getfeature(
             typename=typename,
             maxfeatures=limit,
             propertyname=self.requested_columns,
-            filter=filter,
+            filter=filterXml,
+            method='POST' if filterXml else 'GET'
         )
 
         try:
@@ -103,22 +104,66 @@ class Cursor:
         self._generate_description()
         self._index = 0
 
-    def _get_filter_from_expression(self, where_expr: sqlglot.exp.Where):
+    supported_expressions = [
+        sqlglot.expressions.EQ,
+        sqlglot.expressions.NEQ,
+        sqlglot.expressions.GT,
+        sqlglot.expressions.GTE,
+        sqlglot.expressions.LT,
+        sqlglot.expressions.LTE,
+        sqlglot.expressions.And,
+        # sqlglot.expressions.In,
+        # sqlglot.expressions.Not,
+    ]
 
-        if not isinstance(where_expr, sqlglot.exp.Where):
-            raise ValueError("Ungültige WHERE-Klausel")
+    def _get_filter_from_expression(self, expression, is_root: bool = True) -> str:
+
+        if not isinstance(expression, tuple(self.supported_expressions)):
+            raise ValueError("Unsupported filter expression:", expression.__class__.__name__)
 
         filter = None
 
+        # Handle AND
+        if isinstance(expression, sqlglot.expressions.And):
+            filter = And([
+                self._get_filter_from_expression(expression.this, is_root=False),
+                self._get_filter_from_expression(expression.args["expression"], is_root=False)
+            ])
         # Handle equality
-        if isinstance(where_expr.this, sqlglot.expressions.EQ):
-            propertyname = where_expr.this.this.name
-            literal = where_expr.this.args["expression"].name
+        elif isinstance(expression, sqlglot.expressions.EQ):
+            propertyname = expression.this.name
+            literal = expression.args["expression"].name
             filter = PropertyIsEqualTo(propertyname=propertyname, literal=literal)
+        # Handle inequality
+        elif isinstance(expression, sqlglot.expressions.NEQ):
+            propertyname = expression.this.name
+            literal = expression.args["expression"].name
+            filter = PropertyIsNotEqualTo(propertyname=propertyname, literal=literal)
+        # Handle greater than
+        elif isinstance(expression, sqlglot.expressions.GT):
+            propertyname = expression.this.name
+            literal = expression.args["expression"].name
+            filter = PropertyIsGreaterThan(propertyname=propertyname, literal=literal)
+        # Handle greater than or equal
+        elif isinstance(expression, sqlglot.expressions.GTE):
+            propertyname = expression.this.name
+            literal = expression.args["expression"].name
+            filter = PropertyIsGreaterThanOrEqualTo(propertyname=propertyname, literal=literal)
+        # Handle less than
+        elif isinstance(expression, sqlglot.expressions.LT):
+            propertyname = expression.this.name
+            literal = expression.args["expression"].name
+            filter = PropertyIsLessThan(propertyname=propertyname, literal=literal)
+        # Handle less than or equal
+        elif isinstance(expression, sqlglot.expressions.LTE):
+            propertyname = expression.this.name
+            literal = expression.args["expression"].name
+            filter = PropertyIsLessThanOrEqualTo(propertyname=propertyname, literal=literal)
 
-        #TODO handle other expressions
+        if not filter:
+            raise ValueError("Unsupported filter expression")
 
-        return filter
+        return Filter(filter) if is_root else filter
 
     def _parse_gml(self, xml_text: str) -> List[Dict[str, str]]:
         """Parse GML XML response into a list of feature dictionaries.
