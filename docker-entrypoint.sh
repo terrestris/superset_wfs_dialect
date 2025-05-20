@@ -1,6 +1,7 @@
 #!/bin/bash
 
-# OWSLib direkt aus dem Sourcecode laden
+# Load OWSLib directly from the source code
+# Not necessary as soon as a new version of OWSLib has been released
 if [ -d "/app/owslib" ]; then
     echo "OWSLib directory found at /app/owslib"
     if [ -d "/app/owslib/owslib" ]; then
@@ -16,10 +17,10 @@ else
     exit 1
 fi
 
-# Starte Superset-Datenbankmigration
+# Start Superset database migration
 superset db upgrade
 
-# Erstelle Admin-User, falls nicht vorhanden
+# Create admin user if not available
 superset fab create-admin \
     --username admin \
     --firstname Superset \
@@ -27,9 +28,9 @@ superset fab create-admin \
     --email admin@superset.local \
     --password admin
 
-# Initialisiere Superset
+# Initialize Superset
 superset init
 
-# Starte Flask im Debug-Modus mit Remote Debugging Support
+# Start Flask in debug mode with remote debugging support
 export PYTHONPATH=/app/owslib:/app/pythonpath
 python -m debugpy --listen 0.0.0.0:5678 -m flask run -p 8088 --host=0.0.0.0 --reload --debugger

@@ -1,9 +1,7 @@
 from sqlalchemy.engine.default import DefaultDialect
-from sqlalchemy.engine.url import URL
 from .base import FakeDbApi
 import superset_wfs_dialect
 import logging
-import xml.etree.ElementTree as ET
 from sqlalchemy import types as sqltypes
 
 logging.basicConfig(level=logging.INFO)
@@ -52,13 +50,12 @@ class WfsDialect(DefaultDialect):
 
     # TODO use GetCapabilites & DescribeFeatureType
     def get_schema_names(self, connection, **kw):
-        # Simpel: return statisch oder einmal gecacht
         logger.info("get_schema_names() aufgerufen")
         return ['default']
 
     def has_table(self, connection, table_name, schema=None):
         logger.info("has_table(schema=%s, table=%s)", schema, table_name)
-        return True  # oder prüfen ob in get_table_names enthalten
+        return True
 
     def get_view_names(self, connection, schema=None, **kw):
         logger.info("get_view_names() aufgerufen für schema=%s", schema)
@@ -69,7 +66,6 @@ class WfsDialect(DefaultDialect):
 
         wfs = connection.connection.connection.wfs
         layer_keys = list(wfs.contents.keys())
-        # layer_keys = [k.split(":")[-1] for k in layer_keys]
 
         return layer_keys
 

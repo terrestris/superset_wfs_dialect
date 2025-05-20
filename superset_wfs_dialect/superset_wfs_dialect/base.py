@@ -222,11 +222,11 @@ class Cursor:
             # this is version 2.0.0 specific and could be different in 1.1.0
             count_default_element = capabilities_ast.find(".//ows:Constraint[@name='CountDefault']/ows:DefaultValue", namespaces={"ows": "http://www.opengis.net/ows/1.1"})
             if count_default_element is None:
-                logger.info("Fehler beim Abrufen der CountDefault-Elemente")
+                logger.info("Error when fetching the CountDefault elements")
                 return None
 
             count_default = int(count_default_element.text)
-            logger.info("Maximale Anzahl von Features: %s", count_default)
+            logger.info("Maximum number of features: %s", count_default)
             return count_default
 
     def _get_feature_count(

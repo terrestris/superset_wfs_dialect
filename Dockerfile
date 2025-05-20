@@ -1,20 +1,15 @@
-FROM apache/superset:latest
+FROM apache/superset:5.0.0rc2@sha256:00c4ddf3b8a6a9fc95f0dffb09e8f29129732ca5fee0aff2fd5c30cc6668deff
 
-# Installiere benötigte Python-Abhängigkeiten
 USER root
-RUN pip install sqlalchemy requests sqlglot debugpy lxml
 
-# Setze Berechtigungen für /app/pythonpath und /app/owslib
 COPY superset_config.py /app/pythonpath/
 RUN chown -R superset:superset /app/pythonpath
 RUN mkdir -p /app/owslib && chown -R superset:superset /app/owslib
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh
-
-# chmod bleibt unter root!
 RUN chmod +x /app/docker-entrypoint.sh
 
-# Zurück zu superset-User
+RUN pip install --no-cache-dir --target=/app/pythonpath requests sqlglot debugpy lxml
+
 USER superset
 
-# Superset starten via Skript
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
