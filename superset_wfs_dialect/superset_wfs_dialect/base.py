@@ -77,7 +77,7 @@ class Cursor:
 
     def _extract_typename(self, ast):
         if not isinstance(ast, sqlglot.expressions.Select):
-            raise ValueError("Only select statements are supported")
+            raise ValueError("Only SELECT statements are supported")
 
         from_expr = ast.args.get("from")
         if not from_expr:
