@@ -2,7 +2,7 @@ services:
   superset:
     build:
       context: .
-      dockerfile: Dockerfile
+      dockerfile: Dockerfile.dev
     image: superset-with-wfs
     container_name: superset
     cap_add:
@@ -11,8 +11,8 @@ services:
       - 8088:8088
       - 5678:5678
     environment:
-      - SUPERSET_ENV=production
-      - PYTHONPATH=/app/pythonpath
+      - SUPERSET_ENV=development
+      - DEBUG_MODE=true
     healthcheck:
         test: ["CMD-SHELL", "curl -f http://127.0.0.1:8088/login/ || exit 1"]
         interval: 30s
@@ -21,8 +21,8 @@ services:
         start_period: 90s
     volumes:
       - superset_home:/app/superset_home
-      - ./superset_wfs_dialect/superset_wfs_dialect:/app/pythonpath/superset_wfs_dialect
-      - ${OWSLIB_PATH}:/app/owslib
+      - ./superset_wfs_dialect:/app/pythonpath/superset_wfs_dialect
+      - ./superset_config.py:/app/pythonpath/superset_config.py:ro
 
 volumes:
   superset_home:
