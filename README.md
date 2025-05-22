@@ -62,3 +62,23 @@ To add a new database:
 - choose "Other" at the list of "Supported Databases"
 - insert the SQLAlchemy URI (`wfs://[...]`)
 - test the connection
+
+### Docker Image and Deployment
+
+The Docker image is automatically built and published to GitHub Container Registry (ghcr.io) through GitHub Actions. The workflow is triggered on:
+
+- Every push to the `main` branch
+- Every tag push starting with 'v' (e.g., v1.0.0)
+
+The following Docker tags are created:
+
+- `latest` - Always points to the latest version from the main branch
+- `vX.Y.Z` - Full semantic version (e.g., v1.2.3)
+- `X.Y` - Major.Minor version (e.g., 1.2)
+- `X` - Major version (e.g., 1)
+
+You can pull the image using:
+
+```bash
+docker pull ghcr.io/terrestris/superset_wfs_dialect:[VERSION|latest]
+```

@@ -12,8 +12,8 @@ setup(
     packages=find_packages(),
     install_requires=requirements,
     entry_points={
-        "sqlalchemy.dialects": [
-            "wfs = superset_wfs_dialect.dialect:WfsDialect"
-        ]
+        'sqlalchemy.dialects': [
+            'wfs = superset_wfs_dialect.dialect:WfsDialect',
+            ],
     },
 )
