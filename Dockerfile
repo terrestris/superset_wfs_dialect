@@ -8,8 +8,8 @@ RUN mkdir -p /app/owslib && chown -R superset:superset /app/owslib
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh
 
-RUN pip install --no-cache-dir --target=/app/pythonpath requests sqlglot debugpy lxml
-
+COPY superset_wfs_dialect/requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir --target=/app/pythonpath -r /app/requirements.txt
 USER superset
 
 ENTRYPOINT ["/app/docker-entrypoint.sh"]
