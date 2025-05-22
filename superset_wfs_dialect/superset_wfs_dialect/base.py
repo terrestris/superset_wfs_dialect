@@ -9,6 +9,7 @@ import sqlglot
 import logging
 import xml.etree.ElementTree as ET
 from typing import Optional, List, Dict, Any, Tuple
+from .gml_parser import GMLParser
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -35,6 +36,7 @@ class Cursor:
         self.description: Optional[List[Tuple[str, str, None, None, None, None, bool]]] = None
         self._index: int = 0
         self.requested_columns: List[str] = ["*"]
+        self.typename: Optional[str] = None
 
     def execute(self, operation: str, parameters: Optional[Dict] = None) -> None:
         operation = operation.strip()
@@ -44,15 +46,15 @@ class Cursor:
             return
 
         ast = self._parse_sql(operation)
-        typename = self._extract_typename(ast)
+        self.typename = self._extract_typename(ast)
         self.requested_columns = self._extract_requested_columns(ast)
         limit = self._extract_limit(ast)
         filterXml = self._extract_filter(ast)
         aggregation_info = self._get_aggregationinfo(ast)
 
-        logger.info("Requesting WFS layer %s", typename)
+        logger.info("Requesting WFS layer %s", self.typename)
 
-        all_features = self._fetch_all_features(typename, filterXml)
+        all_features = self._fetch_all_features(self.typename, filterXml)
         aggregated_data = self._aggregate_features(all_features, aggregation_info)
         self._apply_limit(aggregated_data, limit)
         # self._apply_order(ast, aggregated_data)  # currently disabled
@@ -279,10 +281,14 @@ class Cursor:
             method='POST' if filterXml else 'GET'
         )
 
+        gmlparser = GMLParser(
+            geometry_column=self.connection.wfs.get_schema(self.typename).get("geometry_column")
+        )
+
         try:
             xml_text = response.read().decode("utf-8")
             logger.debug("WFS response: %s", xml_text)
-            return self._parse_gml(xml_text)
+            return gmlparser.parse(xml_text)
         except ET.ParseError as e:
             logger.error("Error parsing the WFS response: %s", e)
             raise ValueError("Error parsing the WFS response")
@@ -389,36 +395,6 @@ class Cursor:
             raise ValueError("Unsupported filter expression")
 
         return Filter(filter) if is_root else filter
-
-    def _parse_gml(self, xml_text: str) -> List[Dict[str, str]]:
-        """Parse GML XML response into a list of feature dictionaries.
-
-        Args:
-            xml_text: The GML XML text to parse
-
-        Returns:
-            A list of dictionaries containing the feature properties
-        """
-        ns = {
-            "wfs": "http://www.opengis.net/wfs/2.0",
-            "gml": "http://www.opengis.net/gml/3.2",
-        }
-        root = ET.fromstring(xml_text)
-        members = root.findall(".//wfs:member", ns)
-        features = []
-
-        for member in members:
-            feature_elem = next(iter(member), None)
-            if feature_elem is None:
-                continue
-            props = {}
-            for elem in feature_elem:
-                tag = elem.tag.split("}")[-1]
-                if elem.text and elem.text.strip():
-                    props[tag] = elem.text.strip()
-            if props:
-                features.append(props)
-        return features
 
     def _generate_description(self):
         """Generates the column description in the correct order."""
