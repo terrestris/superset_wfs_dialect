@@ -1,4 +1,4 @@
-# Superset Konfigurationsdatei zum Registrieren des WFS-Dialekts
+# Superset example configuration file for registering the WFS dialect
 
 SECRET_KEY = "kK4w2z9/X4bCDiQh5I1ZFKGzvSFWkqj2XfNflh/VKQ0="
 

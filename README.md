@@ -1,49 +1,60 @@
-# superset_wfs_dialect
+# SQLAlchemy dialect for OGC WFS
 
 SQLAlchemy dialect for OGC WFS as a Superset plugin.
 
-Checkout the project.
+## Register the dialect
 
-## Prerequisites
+TBD
+<!-- This section should contain the documentaion of how to use the package without development -->
 
-Create a virtual environment and install the required packages.
+## Development
 
-```bash
-python3 -m venv venv
-source venv/bin/activate
-```
+### Prerequisites for development
 
-or via VS-Code:
+- Docker Engine >= version 28
+- python >= version 3.10.12
+- Checkout this project
+- :warning: Currently the setup requires a local installation of `owslib`. Checkout OWSLib
+  <https://github.com/geopython/OWSLib> and set the path in the `.env` file (see `.env.example`).  
+  When a version >= 0.33.0 will be released, this can be omitted.
 
-<https://code.visualstudio.com/docs/python/python-tutorial#_create-a-virtual-environment>
+### Installation
 
-:warning: Currently the setup requires a local installation of `owslib`. Checkout this branch
-<https://github.com/KaiVolland/OWSLib/tree/arcgis-server-support> and set the path in the `.env` file.
-
-## Installation
-
-Run via terminal:
+For debugging and code completion run via terminal:
 
 ```bash
-cd ./superset_wfs_dialect # within the project root
+cd ./superset_wfs_dialect
+python3 -m venv .venv
+source .venv/bin/activate
 pip install -e .
-python tests/test_query.py
 ```
 
-or:
+**or** create a virtual environment via VS Code:
 
-```bash
-cd ./superset_wfs_dialect/superset_wfs_dialect
-python test_wfs.py
-```
+<https://code.visualstudio.com/docs/python/python-tutorial#_create-a-virtual-environment>.
 
-Start superset with plugin:
+Start superset with the registered plugin:
 
 ```bash
 docker compose up -d --build
 ```
 
-Open [http://localhost:8088/](http://localhost:8088/).
+### Debugging during development
+
+Debugging can be activated via the VS Code during development using `F5`.
+Please note that the Python interpreter is selected from the previously created venv.
+Breakpoints set in VS Code are then taken into account.
+
+### Start the application
+
+<!-- markdownlint-disable MD033 -->
+Open <a
+  href="http://localhost:8088/"
+  target="_blank"
+  rel="noopener noreferrer">
+    http://localhost:8088/
+  </a>.
+<!-- markdownlint-enable MD033 -->
 
 To add a new database:
 
