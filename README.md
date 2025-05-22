@@ -43,11 +43,18 @@ docker compose up -d --build
 
 Debugging can be activated via the VS Code during development using `F5`.
 Please note that the Python interpreter is selected from the previously created venv.
-Breakpoints set in VSCode are then taken into account.
+Breakpoints set in VS Code are then taken into account.
 
 ### Start the application
 
-Open [http://localhost:8088/](http://localhost:8088/).
+<!-- markdownlint-disable MD033 -->
+Open <a
+  href="http://localhost:8088/"
+  target="_blank"
+  rel="noopener noreferrer">
+    http://localhost:8088/
+  </a>.
+<!-- markdownlint-enable MD033 -->
 
 To add a new database:
 
