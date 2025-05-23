@@ -93,6 +93,14 @@ class WfsDialect(DefaultDialect):
                 "nullable": not required,
                 "default": None,
             })
+
+        columns.append({
+            "name": fiona_schema.get('geometry_column'),
+            "type": sqltypes.String(),
+            "nullable": True,
+            "default": None,
+        })
+
         return columns
 
 from sqlalchemy.dialects import registry
