@@ -20,10 +20,9 @@ TBD
 
 ### Installation
 
-For debugging and code completion run via terminal:
+For debugging and code completion run via terminal within the project root:
 
 ```bash
-cd ./superset_wfs_dialect
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .
