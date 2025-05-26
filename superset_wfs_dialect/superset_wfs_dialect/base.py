@@ -35,14 +35,14 @@ class Cursor:
         self.data: List[Dict[str, Any]] = []
         self.description: Optional[List[Tuple[str, str, None, None, None, None, bool]]] = None
         self._index: int = 0
-        self.requested_columns: List[str] = ["*"]
+        # Dict of { 'name': 'alias' } for requested columns
+        self.requested_columns: Dict = {}
         self.typename: Optional[str] = None
         self.sql_logger = SQLLogger()
 
     def execute(self, operation: str, parameters: Optional[Dict] = None) -> None:
         operation = operation.strip()
 
-        # TODO: make logging configurable
         self.sql_logger.log_sql(operation, parameters)
 
         if operation.lower() == "select 1":
@@ -93,12 +93,23 @@ class Cursor:
         table_expr = ast.find(sqlglot.exp.Table)
         return table_expr.this.name if table_expr else None
 
-
     def _extract_requested_columns(self, ast):
+        '''Extracts requested columns from the SQL AST.
+        Returns a dictionary of { 'property_name': 'alias' }.
+        Returns an empty dictionary if no columns are specified.
+        '''
+        requested_columns = {}
+
         # Get property names
-        cols = [col.alias_or_name for col in ast.expressions]
-        # strip propname from aggregation wrapper AVG(propname), COUNT(propname), ...
-        return [col.split("(")[-1].split(")")[0] if "(" in col else col for col in cols]
+        for col in ast.expressions:
+            name = col.this.this.name
+            # # strip propname from aggregation wrapper AVG(propname), COUNT(propname), ...
+            # return [col.split("(")[-1].split(")")[0] if "(" in col else col for col in cols]
+            alias = col.alias_or_name
+            requested_columns[name] = alias if alias else name
+
+        return requested_columns
+
 
     def _extract_limit(self, ast):
         # Get Limit
@@ -245,7 +256,7 @@ class Cursor:
 
         response = None
         if filterXml:
-            respnse = requests.post(
+            response = requests.post(
                 url,
                 data=filterXml,
                 headers={"Content-Type": "application/xml"}
@@ -276,10 +287,13 @@ class Cursor:
         startindex: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         wfs = self.connection.wfs
+
+        propertynames = list(self.requested_columns.keys())
+
         response: BytesIO = wfs.getfeature(
             typename=typename,
             maxfeatures=limit,
-            propertyname=self.requested_columns,
+            propertyname=propertynames,
             filter=filterXml,
             startindex=startindex,
             method='POST' if filterXml else 'GET'
@@ -405,7 +419,7 @@ class Cursor:
             self.description = []
             return
 
-        if self.requested_columns == ["*"]:
+        if not self.requested_columns:
             # For SELECT * all columns in the order in which they appear
             self.description = [
                 (col, "string", None, None, None, None, True) for col in self.data[0].keys()
@@ -413,17 +427,17 @@ class Cursor:
         else:
             # Otherwise only the requested columns in the correct order
             self.description = [
-                (col, "string", None, None, None, None, True) for col in self.requested_columns
+                (col, "string", None, None, None, None, True) for col in self.requested_columns.values()
             ]
 
     def _get_row_values(self, row: Dict[str, Any]) -> tuple:
         """Returns the values in the correct order."""
-        if self.requested_columns == ["*"]:
+        if not self.requested_columns:
             # For SELECT * all columns in the order in which they appear
             return tuple(row.values())
         else:
             # Otherwise only the requested columns in the correct order
-            return tuple(row.get(col) for col in self.requested_columns)
+            return tuple(row.get(col) for col in self.requested_columns.keys())
 
     def fetchall(self):
         return [self._get_row_values(row) for row in self.data]
