@@ -63,22 +63,35 @@ To add a new database:
 - insert the SQLAlchemy URI (`wfs://[...]`)
 - test the connection
 
-### Docker Image and Deployment
+## Publishing a Development Version to TestPyPI
 
-The Docker image is automatically built and published to GitHub Container Registry (ghcr.io) through GitHub Actions. The workflow is triggered on:
+### Requirements
 
-- Every push to the `main` branch
-- Every tag push starting with 'v' (e.g., v1.0.0)
+- You must be on the main branch
+- Your working directory must be clean (no uncommitted changes)
+- You have push access to the repository
+- A valid `TEST_PYPI_TOKEN` is configured in GitHub Secrets (used by the GitHub Actions workflow)
 
-The following Docker tags are created:
+### Releasing a dev version
 
-- `latest` - Always points to the latest version from the main branch
-- `vX.Y.Z` - Full semantic version (e.g., v1.2.3)
-- `X.Y` - Major.Minor version (e.g., 1.2)
-- `X` - Major version (e.g., 1)
+1. Run the release script with the desired version number (e.g. `0.0.1dev2`):
 
-You can pull the image using:
+    ```bash
+    ./release.sh 0.0.1dev2
+    ```
 
-```bash
-docker pull ghcr.io/terrestris/superset_wfs_dialect:[VERSION|latest]
-```
+    This will:
+
+    - Update the `version` field in `setup.py`
+    - Commit the change to `main`
+    - Create a Git tag e.g. `0.0.1dev2`
+    - Push the tag to GitHub
+
+2. The GitHub Actions workflow will be triggered by the tag:
+
+    - It will build the package
+    - Upload it to TestPyPI
+
+### Notes
+
+- Versions must follow the format `X.Y.Z` or `X.Y.ZdevN` (e.g. `0.1.0dev3`)

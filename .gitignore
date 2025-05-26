@@ -6,5 +6,5 @@ venv
 .pytest*
 *.egg-info/
 build
-
 sql_log.csv
+dist

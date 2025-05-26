@@ -2,7 +2,6 @@ services:
   superset:
     build:
       context: .
-      dockerfile: Dockerfile.dev
     image: superset-with-wfs
     container_name: superset
     cap_add:
@@ -25,6 +24,8 @@ services:
     volumes:
       - superset_home:/app/superset_home
       - ./superset_wfs_dialect:/app/pythonpath/superset_wfs_dialect
+      - ./requirements.txt:/app/pythonpath/requirements.txt
+      - ./setup.py:/app/pythonpath/setup.py
       - ./superset_config.py:/app/pythonpath/superset_config.py:ro
 
 volumes:

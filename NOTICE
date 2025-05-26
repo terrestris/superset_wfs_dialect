@@ -1,0 +1,34 @@
+superset_wfs_dialect
+Copyright 2025 terrestris GmbH & Co. KG
+
+This product includes software developed by
+terrestris GmbH & Co. KG (https://www.terrestris.de/).
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at:
+
+    http://www.apache.org/licenses/LICENSE-2.0
+
+This project also includes the following third-party software:
+
+- SQLAlchemy, MIT License
+  https://www.sqlalchemy.org/
+
+- requests, Apache License 2.0
+  https://docs.python-requests.org/
+
+- OWSLib, BSD License
+  https://geopython.github.io/OWSLib/
+
+- sqlglot, MIT License
+  https://github.com/tobymao/sqlglot
+
+- debugpy, MIT License
+  https://github.com/microsoft/debugpy
+
+- lxml, BSD 3-Clause License
+  https://lxml.de/
+
+Each third-party component is licensed under its respective license,
+as permitted by the Apache License 2.0.
