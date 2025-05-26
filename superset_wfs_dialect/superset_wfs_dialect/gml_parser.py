@@ -16,38 +16,38 @@ class GMLParser:
         self._geometry_column = geometry_column
 
     def parse(self, xml_text: str) -> List[Dict[str, str]]:
-      """Parse GML XML response into a list of feature dictionaries.
+        """Parse GML XML response into a list of feature dictionaries.
 
-      Args:
-          xml_text: The GML XML text to parse
+        Args:
+            xml_text: The GML XML text to parse
 
-      Returns:
-          A list of dictionaries containing the feature properties
-      """
-      ns = {
-          "wfs": "http://www.opengis.net/wfs/2.0",
-          "gml": "http://www.opengis.net/gml/3.2",
-      }
-      root = ET.fromstring(xml_text)
-      members = root.findall(".//wfs:member", ns)
-      features = []
+        Returns:
+            A list of dictionaries containing the feature properties
+        """
+        ns = {
+            "wfs": "http://www.opengis.net/wfs/2.0",
+            "gml": "http://www.opengis.net/gml/3.2",
+        }
+        root = ET.fromstring(xml_text)
+        members = root.findall(".//wfs:member", ns)
+        features = []
 
-      for member in members:
-          feature_elem = next(iter(member), None)
-          if feature_elem is None:
-              continue
-          props = {}
-          for elem in feature_elem:
-              tag = elem.tag.split("}")[-1]
+        for member in members:
+            feature_elem = next(iter(member), None)
+            if feature_elem is None:
+                continue
+            props = {}
+            for elem in feature_elem:
+                tag = elem.tag.split("}")[-1]
 
-              if tag == self._geometry_column:
-                  gml_elem = list(elem)[0]
-                  props[tag] = self._gml_to_wkt(gml_elem)
-              elif elem.text and elem.text.strip():
-                  props[tag] = elem.text.strip()
-          if props:
-              features.append(props)
-      return features
+                if tag == self._geometry_column:
+                    gml_elem = list(elem)[0]
+                    props[tag] = self._gml_to_wkt(gml_elem)
+                elif elem.text and elem.text.strip():
+                    props[tag] = elem.text.strip()
+            if props:
+                features.append(props)
+        return features
 
     def _parse_coords(self, pos_text: str) -> str:
         """Parse coordinate pairs from a space-separated string."""

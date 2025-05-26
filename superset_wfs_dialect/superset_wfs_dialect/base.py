@@ -1,16 +1,16 @@
 import requests
 import math
+import logging
+import sqlglot
 import sqlglot.expressions
+from io import BytesIO
+import xml.etree.ElementTree as ET
+from typing import Optional, List, Dict, Any, Tuple
 from owslib.wfs import WebFeatureService
 from owslib.fes2 import *
 from owslib.feature.wfs200 import WebFeatureService_2_0_0
-from io import BytesIO
-import sqlglot
-import logging
-import xml.etree.ElementTree as ET
-from typing import Optional, List, Dict, Any, Tuple
 from .gml_parser import GMLParser
-import logging
+from .sql_logger import SQLLogger
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -37,9 +37,13 @@ class Cursor:
         self._index: int = 0
         self.requested_columns: List[str] = ["*"]
         self.typename: Optional[str] = None
+        self.sql_logger = SQLLogger()
 
     def execute(self, operation: str, parameters: Optional[Dict] = None) -> None:
         operation = operation.strip()
+
+        # TODO: make logging configurable
+        self.sql_logger.log_sql(operation, parameters)
 
         if operation.lower() == "select 1":
             self._handle_dummy_query()
@@ -311,6 +315,7 @@ class Cursor:
 
         aggregation_class = None
         aggregation_property = None
+        groupby_property = None
 
         for cls in aggregation_classes:
             aggregation = ast.find(cls)
@@ -322,11 +327,9 @@ class Cursor:
         if not aggregation_class:
             return None
 
-        groupby_property = ast.find(sqlglot.exp.Group).find(sqlglot.exp.Column).this.name
-
-        # TODO agregation without groupby is possible
-        # if not groupby_property:
-        #     raise ValueError("Aggregation ohne GROUP BY ist nicht unterstützt")
+        groupby = ast.find(sqlglot.exp.Group)
+        if groupby:
+            groupby_property = groupby.find(sqlglot.exp.Column).this.name
 
         aggregation_info = {
             "class": aggregation_class,
