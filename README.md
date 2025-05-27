@@ -20,10 +20,9 @@ TBD
 
 ### Installation
 
-For debugging and code completion run via terminal:
+For debugging and code completion run via terminal within the project root:
 
 ```bash
-cd ./superset_wfs_dialect
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .
@@ -62,3 +61,36 @@ To add a new database:
 - choose "Other" at the list of "Supported Databases"
 - insert the SQLAlchemy URI (`wfs://[...]`)
 - test the connection
+
+## Publishing a Development Version to TestPyPI
+
+### Requirements
+
+- You must be on the main branch
+- Your working directory must be clean (no uncommitted changes)
+- You have push access to the repository
+- A valid `TEST_PYPI_TOKEN` is configured in GitHub Secrets (used by the GitHub Actions workflow)
+
+### Releasing a dev version
+
+1. Run the release script with the desired version number (e.g. `0.0.1dev2`):
+
+    ```bash
+    ./release.sh 0.0.1dev2
+    ```
+
+    This will:
+
+    - Update the `version` field in `setup.py`
+    - Commit the change to `main`
+    - Create a Git tag e.g. `0.0.1dev2`
+    - Push the tag to GitHub
+
+2. The GitHub Actions workflow will be triggered by the tag:
+
+    - It will build the package
+    - Upload it to TestPyPI
+
+### Notes
+
+- Versions must follow the format `X.Y.Z` or `X.Y.ZdevN` (e.g. `0.1.0dev3`)
