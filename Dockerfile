@@ -13,10 +13,14 @@ RUN chown -R superset:superset /app/pythonpath
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh
 RUN chmod +x /app/docker-entrypoint.sh
 
-# Install all dependencies to /app/pythonpath including OWSLib from git
+# Install all dependencies to /app/pythonpath
 COPY requirements.txt /app/pythonpath
 RUN pip3 install --no-cache-dir -r /app/pythonpath/requirements.txt
 
+# Install OWSLib from GitHub (until official release is available)
+RUN pip3 install --no-cache-dir "git+https://github.com/geopython/OWSLib.git@master"
+
+# Clean up git again
 RUN apt-get purge -y git && apt-get autoremove -y && rm -rf /var/lib/apt/lists/*
 
 USER superset
