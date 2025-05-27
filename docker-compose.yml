@@ -12,6 +12,8 @@ services:
       - 5678:5678
     environment:
       - SUPERSET_ENV=production
+      - ENABLE_SQL_LOGGING=${ENABLE_SQL_LOGGING:-false}
+      - SQL_LOG_FILENAME=/app/sql_log.csv
       - PYTHONPATH=/app/pythonpath
     healthcheck:
         test: ["CMD-SHELL", "curl -f http://127.0.0.1:8088/login/ || exit 1"]
@@ -23,6 +25,7 @@ services:
       - superset_home:/app/superset_home
       - ./superset_wfs_dialect/superset_wfs_dialect:/app/pythonpath/superset_wfs_dialect
       - ${OWSLIB_PATH}:/app/owslib
+      - ${SQL_LOG_PATH}:/app/sql_log.csv:rw
 
 volumes:
   superset_home:

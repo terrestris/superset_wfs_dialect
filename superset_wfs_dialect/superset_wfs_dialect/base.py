@@ -1,16 +1,16 @@
 import requests
 import math
+import logging
+import sqlglot
 import sqlglot.expressions
+from io import BytesIO
+import xml.etree.ElementTree as ET
+from typing import Optional, List, Dict, Any, Tuple
 from owslib.wfs import WebFeatureService
 from owslib.fes2 import *
 from owslib.feature.wfs200 import WebFeatureService_2_0_0
-from io import BytesIO
-import sqlglot
-import logging
-import xml.etree.ElementTree as ET
-from typing import Optional, List, Dict, Any, Tuple
 from .gml_parser import GMLParser
-import logging
+from .sql_logger import SQLLogger
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -26,6 +26,9 @@ class Connection:
     def close(self):
         pass
 
+    def commit(self):
+        pass
+
     def rollback(self):
         pass
 
@@ -33,13 +36,20 @@ class Cursor:
     def __init__(self, connection: Connection):
         self.connection = connection
         self.data: List[Dict[str, Any]] = []
+        # https://peps.python.org/pep-0249/#description
         self.description: Optional[List[Tuple[str, str, None, None, None, None, bool]]] = None
         self._index: int = 0
-        self.requested_columns: List[str] = ["*"]
+        # Dict of { 'name': 'alias' } for requested columns
+        self.requested_columns: Dict = {}
         self.typename: Optional[str] = None
+        self.propertynames: List[str] = ['*']
+        self.sql_logger = SQLLogger()
+        self.rowcount: Optional[int] = None
 
     def execute(self, operation: str, parameters: Optional[Dict] = None) -> None:
         operation = operation.strip()
+
+        self.sql_logger.log_sql(operation, parameters)
 
         if operation.lower() == "select 1":
             self._handle_dummy_query()
@@ -47,6 +57,7 @@ class Cursor:
 
         ast = self._parse_sql(operation)
         self.typename = self._extract_typename(ast)
+        self.propertynames = self._extract_propertynames(ast)
         self.requested_columns = self._extract_requested_columns(ast)
         limit = self._extract_limit(ast)
         filterXml = self._extract_filter(ast)
@@ -57,12 +68,12 @@ class Cursor:
         all_features = self._fetch_all_features(self.typename, filterXml)
         aggregated_data = self._aggregate_features(all_features, aggregation_info)
         self._apply_limit(aggregated_data, limit)
-        # self._apply_order(ast, aggregated_data)  # currently disabled
+        # self._apply_order(ast, aggregated_data, aggregation_info)
 
         self.data = aggregated_data
-        self._generate_description()
+        self.rowcount = len(self.data)
+        self.description = self._generate_description()
         self._index = 0
-
 
     def _handle_dummy_query(self):
         self.data = [{"dummy": 1}]
@@ -89,12 +100,51 @@ class Cursor:
         table_expr = ast.find(sqlglot.exp.Table)
         return table_expr.this.name if table_expr else None
 
+    def _extract_propertynames(self, ast):
+        '''Extracts property names from the SQL AST.
+        Returns a list of property names.
+        Returns an empty list if no properties are specified.
+        '''
+        propertynames = []
+
+        # Get property names
+        for col in ast.expressions:
+            if isinstance(col.this, sqlglot.exp.Column):
+                name = col.this.name
+            elif isinstance(col.this, sqlglot.exp.AggFunc):
+                name = col.this.this.name
+            elif isinstance(col.this, sqlglot.exp.Literal):
+                name = str(col.this)
+            else:
+                name = str(col.this)
+            if not name:
+                continue
+
+            # add the name to the list if it is not already present
+            if name not in propertynames:
+                propertynames.append(name)
+
+        return propertynames
 
     def _extract_requested_columns(self, ast):
+        '''Extracts requested columns from the SQL AST.
+        Returns a dictionary of { 'property_name': 'alias' }.
+        Returns an empty dictionary if no columns are specified.
+        '''
+        requested_columns = {}
+
         # Get property names
-        cols = [col.alias_or_name for col in ast.expressions]
-        # strip propname from aggregation wrapper AVG(propname), COUNT(propname), ...
-        return [col.split("(")[-1].split(")")[0] if "(" in col else col for col in cols]
+        for col in ast.expressions:
+            # name should be the statement before "AS"
+            name = col.this.name if isinstance(col.this, sqlglot.exp.Column) else str(col.this)
+            if not name:
+                continue
+            # alias should be the statement after "AS"
+            alias = col.alias
+            requested_columns[name] = alias if alias else name
+
+        return requested_columns
+
 
     def _extract_limit(self, ast):
         # Get Limit
@@ -126,7 +176,7 @@ class Cursor:
             total_features = self._get_feature_count(typename=typename)
             if total_features / limit > 100:
                 # reduce requests if there are too many features to never reach 100 requests
-                limit = self.round_up_to_nearest_power(total_features / 100)
+                limit = self._round_up_to_nearest_power(total_features / 100)
 
         startindex = 0
         all_features = []
@@ -150,32 +200,42 @@ class Cursor:
         # If no aggregation is requested, return all features
         if not aggregation_info:
             return all_features
-        agg_class = aggregation_info["class"]
-        agg_prop = aggregation_info["propertyname"]
-        agg_groupby = aggregation_info["groupby"]
+
+        group_by_prperty = aggregation_info[0]["groupby"]
+
+        # check if all aggregations are for the same property, if not raise an error
+        if not all(agg["groupby"] == group_by_prperty for agg in aggregation_info):
+            raise ValueError("All aggregations must be for the same property")
         grouped_data = {}
 
         for feature in all_features:
-            group_value = feature.get(agg_groupby)
+            group_value = feature.get(group_by_prperty)
             if group_value not in grouped_data:
                 grouped_data[group_value] = []
             grouped_data[group_value].append(feature)
         aggregated_data = []
 
         for group_value, features in grouped_data.items():
-            if agg_class == sqlglot.exp.Avg:
-                agg_value = sum(float(f.get(agg_prop, 0)) for f in features) / len(features)
-            elif agg_class == sqlglot.exp.Sum:
-                agg_value = sum(float(f.get(agg_prop, 0)) for f in features)
-            elif agg_class == sqlglot.exp.Count:
-                agg_value = len(features)
-            elif agg_class == sqlglot.exp.Max:
-                agg_value = max(float(f.get(agg_prop, 0)) for f in features)
-            elif agg_class == sqlglot.exp.Min:
-                agg_value = min(float(f.get(agg_prop, 0)) for f in features)
-            else:
-                raise ValueError("Unsupported aggregation class")
-            aggregated_data.append({agg_groupby: group_value, agg_prop: agg_value})
+            aggregated_data.append({group_by_prperty: group_value})
+
+            for agg_info in aggregation_info:
+                agg_class = agg_info["class"]
+                agg_prop = agg_info["propertyname"]
+                agg_alias = agg_info.get("alias", None)
+
+                if agg_class == sqlglot.exp.Avg:
+                    agg_value = sum(float(f.get(agg_prop, 0)) for f in features) / len(features)
+                elif agg_class == sqlglot.exp.Sum:
+                    agg_value = sum(float(f.get(agg_prop, 0)) for f in features)
+                elif agg_class == sqlglot.exp.Count:
+                    agg_value = len(features)
+                elif agg_class == sqlglot.exp.Max:
+                    agg_value = max(float(f.get(agg_prop, 0)) for f in features)
+                elif agg_class == sqlglot.exp.Min:
+                    agg_value = min(float(f.get(agg_prop, 0)) for f in features)
+                else:
+                    raise ValueError("Unsupported aggregation class")
+                aggregated_data[-1][agg_alias if agg_alias else agg_prop] = agg_value
 
         return aggregated_data
 
@@ -183,11 +243,10 @@ class Cursor:
         if row_limit is not None:
             data[:] = data[:row_limit]
 
-    # NOTE: currently disabled.
-    # ORDER BY  may refer to a column or to an aggregated metric expression,
+    # ORDER BY may refer to a column or to an aggregated metric expression,
     # and thus requires more context to resolve correctly
     # TODO: Implement proper ordering support based on expression analysis.
-    def _apply_order(self, ast, data):
+    def _apply_order(self, ast, data, aggregation_info):
         order_expr = ast.args.get("order")
         if order_expr:
             for order in order_expr.expressions:
@@ -197,8 +256,7 @@ class Cursor:
                 # Also, ordering by metric expressions is currently unsupported.
                 data.sort(key=lambda row: row.get(order_col), reverse=reverse)
 
-
-    def round_up_to_nearest_power(n):
+    def _round_up_to_nearest_power(n):
         base = 10 ** math.floor(math.log10(n))
         if n <= base:
             return base
@@ -241,7 +299,7 @@ class Cursor:
 
         response = None
         if filterXml:
-            respnse = requests.post(
+            response = requests.post(
                 url,
                 data=filterXml,
                 headers={"Content-Type": "application/xml"}
@@ -272,10 +330,13 @@ class Cursor:
         startindex: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
         wfs = self.connection.wfs
+
+        propertyname = None if filterXml and self.propertynames == ["*"] else self.propertynames
+
         response: BytesIO = wfs.getfeature(
             typename=typename,
             maxfeatures=limit,
-            propertyname=self.requested_columns,
+            propertyname=propertyname,
             filter=filterXml,
             startindex=startindex,
             method='POST' if filterXml else 'GET'
@@ -299,7 +360,7 @@ class Cursor:
             logger.error("Error parsing the WFS response: %s", e)
             raise
 
-    def _get_aggregationinfo(self, ast):
+    def _get_aggregationinfo(self, ast: sqlglot.expressions.Select) -> List[Dict[str, Any]]:
         aggregation_classes = [
             sqlglot.exp.Avg,
             sqlglot.exp.Sum,
@@ -309,30 +370,30 @@ class Cursor:
             sqlglot.exp.Min
         ]
 
+        aggregation_info = []
         aggregation_class = None
-        aggregation_property = None
-
         for cls in aggregation_classes:
-            aggregation = ast.find(cls)
-            if aggregation:
+            aggregation = ast.find_all(cls)
+
+            for agg in aggregation:
                 aggregation_class = cls
-                aggregation_property = aggregation.this.name
+                aggregation_property = agg.this.name
+                aggregation_alias = agg.parent.alias_or_name
+
+                if not aggregation_class:
+                    continue
+
+                groupby = ast.find(sqlglot.exp.Group)
+                if groupby:
+                    groupby_property = groupby.find(sqlglot.exp.Column).this.name
+
+                aggregation_info.append({
+                    "class": aggregation_class,
+                    "propertyname": aggregation_property,
+                    "alias": aggregation_alias,
+                    "groupby": groupby_property
+                })
                 break
-
-        if not aggregation_class:
-            return None
-
-        groupby_property = ast.find(sqlglot.exp.Group).find(sqlglot.exp.Column).this.name
-
-        # TODO agregation without groupby is possible
-        # if not groupby_property:
-        #     raise ValueError("Aggregation ohne GROUP BY ist nicht unterstützt")
-
-        aggregation_info = {
-            "class": aggregation_class,
-            "propertyname": aggregation_property,
-            "groupby": groupby_property
-        }
 
         return aggregation_info
 
@@ -398,29 +459,38 @@ class Cursor:
 
     def _generate_description(self):
         """Generates the column description in the correct order."""
+        description = []
+
         if not self.data:
-            self.description = []
+            description = []
             return
 
-        if self.requested_columns == ["*"]:
+        if not self.requested_columns:
             # For SELECT * all columns in the order in which they appear
-            self.description = [
-                (col, "string", None, None, None, None, True) for col in self.data[0].keys()
+            description = [
+                (col, self._get_column_type(col), None, None, None, None, True) for col in self.data[0].keys()
             ]
         else:
             # Otherwise only the requested columns in the correct order
-            self.description = [
-                (col, "string", None, None, None, None, True) for col in self.requested_columns
+            description = [
+                (col, self._get_column_type(col), None, None, None, None, True) for col in self.requested_columns.values()
             ]
+
+        return description
+
+    # TODO: Implement a proper method to get the column type from the WFS schema
+    def _get_column_type(self, column_name: str) -> str:
+        """Returns the type of the column."""
+        return "string"
 
     def _get_row_values(self, row: Dict[str, Any]) -> tuple:
         """Returns the values in the correct order."""
-        if self.requested_columns == ["*"]:
+        if not self.requested_columns:
             # For SELECT * all columns in the order in which they appear
             return tuple(row.values())
         else:
             # Otherwise only the requested columns in the correct order
-            return tuple(row.get(col) for col in self.requested_columns)
+            return tuple(row.get(col) for col in self.requested_columns.values())
 
     def fetchall(self):
         return [self._get_row_values(row) for row in self.data]
