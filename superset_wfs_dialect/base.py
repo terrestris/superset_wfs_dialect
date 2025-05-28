@@ -16,9 +16,16 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 class Connection:
-    def __init__(self, base_url="https://localhost/geoserver/ows"):
+    def __init__(self, base_url="https://localhost/geoserver/ows", username=None, password=None):
         self.base_url = base_url
-        self.wfs: WebFeatureService_2_0_0 = WebFeatureService(url=base_url, version='2.0.0')
+
+        wfs_args = {"url": base_url, "version": "2.0.0"}
+
+        if username and password:
+            wfs_args["username"] = username
+            wfs_args["password"] = password
+
+        self.wfs: WebFeatureService_2_0_0 = WebFeatureService(**wfs_args)
 
     def cursor(self):
         return Cursor(self)
@@ -168,6 +175,8 @@ class Cursor:
         # If we have an aggregation, we have to recursively call the WFS until all features are fetched
         # and then aggregate them in Python
 
+        limit = 10000
+
         # fetch as many features as possible with one request
         server_side_maxfeatures = self._get_server_side_max_features(typename=typename)
         if server_side_maxfeatures is not None:
@@ -269,6 +278,8 @@ class Cursor:
 
     def _get_server_side_max_features(self, typename: str) -> int:
         base_url = self.connection.base_url
+
+        # TODO: use self.connection.wfs.getcapabilities() !Does not support typename parameter!
         url = f"{base_url}?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetCapabilities&typename={typename}"
         requests.get(url)
         response = requests.get(url)
@@ -295,6 +306,7 @@ class Cursor:
         filterXml: Optional[str] = None,
     ) -> int:
         base_url = self.connection.base_url
+        # TODO: use self.connection.wfs.getfeature() !Does not support resultType!
         url = f"{base_url}?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&typename={typename}&resultType=hits"
 
         response = None
@@ -348,7 +360,6 @@ class Cursor:
 
         try:
             xml_text = response.read().decode("utf-8")
-            logger.debug("WFS response: %s", xml_text)
             return gmlparser.parse(xml_text)
         except ET.ParseError as e:
             logger.error("Error parsing the WFS response: %s", e)
@@ -384,6 +395,7 @@ class Cursor:
                     continue
 
                 groupby = ast.find(sqlglot.exp.Group)
+                groupby_property = None
                 if groupby:
                     groupby_property = groupby.find(sqlglot.exp.Column).this.name
 
@@ -513,8 +525,10 @@ class Cursor:
 
 def connect(*args, **kwargs):
     base_url = kwargs.get("base_url", "https://localhost/geoserver/ows")
+    username = kwargs.get("username")
+    password = kwargs.get("password")
     print(args, kwargs)
-    return Connection(base_url)
+    return Connection(base_url=base_url, username=username, password=password)
 
 class FakeDbApi:
     paramstyle = "pyformat"
