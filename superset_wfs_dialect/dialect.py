@@ -36,10 +36,17 @@ class WfsDialect(DefaultDialect):
         host = url.host
         port = f":{url.port}" if url.port else ""
         path = f"/{url.database}" if url.database else ""
+        username = url.username
+        password = url.password
 
         base_url = f"{scheme}://{host}{port}{path}"
 
-        return [], {"base_url": base_url}
+        connect_args = {"base_url": base_url}
+        if username and password:
+            connect_args["username"] = username
+            connect_args["password"] = password
+
+        return [], connect_args
 
     @classmethod
     def dbapi(cls):
