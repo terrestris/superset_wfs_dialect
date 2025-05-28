@@ -168,6 +168,8 @@ class Cursor:
         # If we have an aggregation, we have to recursively call the WFS until all features are fetched
         # and then aggregate them in Python
 
+        limit = 10000
+
         # fetch as many features as possible with one request
         server_side_maxfeatures = self._get_server_side_max_features(typename=typename)
         if server_side_maxfeatures is not None:
@@ -348,7 +350,6 @@ class Cursor:
 
         try:
             xml_text = response.read().decode("utf-8")
-            logger.debug("WFS response: %s", xml_text)
             return gmlparser.parse(xml_text)
         except ET.ParseError as e:
             logger.error("Error parsing the WFS response: %s", e)
@@ -384,6 +385,7 @@ class Cursor:
                     continue
 
                 groupby = ast.find(sqlglot.exp.Group)
+                groupby_property = None
                 if groupby:
                     groupby_property = groupby.find(sqlglot.exp.Column).this.name
 

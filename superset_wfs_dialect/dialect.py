@@ -1,8 +1,9 @@
 from sqlalchemy.engine.default import DefaultDialect
+from sqlalchemy import types as sqltypes
+from sqlalchemy.dialects import registry
 from .base import FakeDbApi
 import superset_wfs_dialect
 import logging
-from sqlalchemy import types as sqltypes
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -103,5 +104,5 @@ class WfsDialect(DefaultDialect):
 
         return columns
 
-from sqlalchemy.dialects import registry
+
 registry.register("wfs", "superset_wfs_dialect.dialect", "WfsDialect")
