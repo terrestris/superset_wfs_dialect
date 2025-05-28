@@ -4,8 +4,21 @@ SQLAlchemy dialect for OGC WFS as a Superset plugin.
 
 ## Register the dialect
 
-TBD
-<!-- This section should contain the documentaion of how to use the package without development -->
+The plugin can currently be installed via the test instance of the [Python Package Index](https://test.pypi.org/project/superset-wfs-dialect/):
+
+```bash
+pip install -i https://test.pypi.org/simple/ superset-wfs-dialect
+pip install "git+https://github.com/geopython/OWSLib.git@master" # Necessary until an official release is available
+```
+
+The dialect must then be registered in the the local `superset_config.py`:
+
+```python
+from sqlalchemy.dialects import registry
+registry.register("wfs", "superset_wfs_dialect.dialect", "WfsDialect")
+```
+
+Start/restart superset and continue as described in the [Start the application section](#start-the-application).
 
 ## Development
 
@@ -50,20 +63,22 @@ Breakpoints set in VS Code are then taken into account.
 ### Start the application
 
 <!-- markdownlint-disable MD033 -->
-Open <a
+When in development mode, open <a
   href="http://localhost:8088/"
   target="_blank"
   rel="noopener noreferrer">
     http://localhost:8088/
-  </a>.
+  </a>. Otherwise, please open the corresponding URL to the installed superset instance.
 <!-- markdownlint-enable MD033 -->
 
 To add a new database:
 
-- select Data > Connect database in th submenu
+- select Data > Connect database in the submenu
 - choose "Other" at the list of "Supported Databases"
-- insert the SQLAlchemy URI (`wfs://[...]`)
+- insert the SQLAlchemy URI to a WFS (`wfs://[...]`)
 - test the connection
+- create a dataset
+- create a chart/dashboard
 
 ## Publishing a Development Version to TestPyPI
 
