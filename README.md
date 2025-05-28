@@ -26,7 +26,10 @@ For debugging and code completion run via terminal within the project root:
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .
+pip install "git+https://github.com/geopython/OWSLib.git@master" # Necessary until an official release is available
 ```
+
+Please note, that you have to install OWSLib separately for now until there is a new version available.
 
 **or** create a virtual environment via VS Code:
 

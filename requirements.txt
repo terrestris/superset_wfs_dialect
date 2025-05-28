@@ -1,6 +1,5 @@
 sqlalchemy==1.4.49
 requests>=2.32.3
-OWSLib @ git+https://github.com/geopython/OWSLib.git@master
 sqlglot>=21.0.0
 debugpy>=1.8.14
 lxml>=5.4.0
