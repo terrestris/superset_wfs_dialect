@@ -1,8 +1,9 @@
 from sqlalchemy.engine.default import DefaultDialect
+from sqlalchemy import types as sqltypes
+from sqlalchemy.dialects import registry
 from .base import FakeDbApi
 import superset_wfs_dialect
 import logging
-from sqlalchemy import types as sqltypes
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -35,10 +36,17 @@ class WfsDialect(DefaultDialect):
         host = url.host
         port = f":{url.port}" if url.port else ""
         path = f"/{url.database}" if url.database else ""
+        username = url.username
+        password = url.password
 
         base_url = f"{scheme}://{host}{port}{path}"
 
-        return [], {"base_url": base_url}
+        connect_args = {"base_url": base_url}
+        if username and password:
+            connect_args["username"] = username
+            connect_args["password"] = password
+
+        return [], connect_args
 
     @classmethod
     def dbapi(cls):
@@ -103,5 +111,5 @@ class WfsDialect(DefaultDialect):
 
         return columns
 
-from sqlalchemy.dialects import registry
+
 registry.register("wfs", "superset_wfs_dialect.dialect", "WfsDialect")
