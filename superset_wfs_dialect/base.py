@@ -18,6 +18,8 @@ logger = logging.getLogger(__name__)
 class Connection:
     def __init__(self, base_url="https://localhost/geoserver/ows", username=None, password=None):
         self.base_url = base_url
+        self.username = username
+        self.password = password
 
         wfs_args = {"url": base_url, "version": "2.0.0"}
 
@@ -311,13 +313,20 @@ class Cursor:
 
         response = None
         if filterXml:
+            auth = None
+            if self.connection.username and self.connection.password:
+                auth = (self.connection.username, self.connection.password)
             response = requests.post(
                 url,
                 data=filterXml,
-                headers={"Content-Type": "application/xml"}
+                headers={"Content-Type": "application/xml"},
+                auth=auth
             )
         else:
-            response = requests.get(url)
+            auth = None
+            if self.connection.username and self.connection.password:
+                auth = (self.connection.username, self.connection.password)
+            response = requests.get(url, auth=auth)
 
         if response.status_code == 200:
             try:
