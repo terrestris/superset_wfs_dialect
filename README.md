@@ -8,7 +8,6 @@ The plugin can currently be installed via the test instance of the [Python Packa
 
 ```bash
 pip install -i https://test.pypi.org/simple/ superset-wfs-dialect
-pip install "git+https://github.com/geopython/OWSLib.git@master" # Necessary until an official release is available
 ```
 
 The dialect must then be registered in the the local `superset_config.py`:
@@ -39,10 +38,7 @@ For debugging and code completion run via terminal within the project root:
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e .
-pip install "git+https://github.com/geopython/OWSLib.git@master" # Necessary until an official release is available
 ```
-
-Please note, that you have to install OWSLib separately for now until there is a new version available.
 
 **or** create a virtual environment via VS Code:
 
