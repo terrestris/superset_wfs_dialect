@@ -26,9 +26,6 @@ Start/restart superset and continue as described in the [Start the application s
 - Docker Engine >= version 28
 - python >= version 3.10.12
 - Checkout this project
-- :warning: Currently the setup requires a local installation of `owslib`. Checkout OWSLib
-  <https://github.com/geopython/OWSLib> and set the path in the `.env` file (see `.env.example`).  
-  When a version >= 0.33.0 will be released, this can be omitted.
 
 ### Installation
 
