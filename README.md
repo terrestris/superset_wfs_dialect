@@ -2,6 +2,90 @@
 
 SQLAlchemy dialect for OGC WFS as a Superset plugin.
 
+## Using the Custom Superset 5 Image with the WFS Dialect Plugin
+
+A prebuilt Docker image based on Superset 5 and including the `superset-wfs-dialect` plugin is available on GitHub Container Registry (GHCR). This image is built from the `Dockerfile.superset-wfs` and contains the plugin version as specified in the image tag.
+
+### 1. Pulling the Image
+
+You can pull the image with a specific plugin version and commit hash (replace `0.0.1.dev3` and `abc1234` with the desired plugin version and commit hash):
+
+```bash
+docker pull ghcr.io/terrestris/superset_wfs_dialect:5.0.0rc2-wfs-0.0.1.dev3-abc1234
+```
+
+This ensures you get the exact build matching the plugin version and code state. For the latest build (which may change), you can still use:
+
+```bash
+docker pull ghcr.io/terrestris/superset_wfs_dialect:latest
+```
+
+### 2. Preparing Required Files and Folders
+
+Before running Superset, you need to create the following on your host system:
+
+- A folder for persistent Superset data:
+
+  ```bash
+  mkdir -p ./superset/data
+  ```
+
+- A configuration file for Superset:
+  - Copy the provided `superset_config.py` from this repository to your working directory. This file already contains the necessary configuration for using the WFS dialect.
+
+- Set permissions so that Docker can write to the data folder:
+
+  ```bash
+  chmod 777 ./superset/data
+  ```
+
+  (For production, set more restrictive permissions and ensure the folder is owned by the correct user.)
+
+### 3. Starting Superset
+
+#### Option A: Using `docker run`
+
+```bash
+docker run -p 8088:8088 \
+  --name superset \
+  -e SUPERSET_ENV=production \
+  -e DEBUG_MODE=false \
+  -v ./superset/data:/app/superset_home \
+  -v ./superset_config.py:/app/pythonpath/superset_config.py:ro \
+  --restart unless-stopped \
+  ghcr.io/terrestris/superset_wfs_dialect:latest
+```
+
+- Add `-d` to run in the background.
+
+#### Option B: Using Docker Compose
+
+Add the following service to your `docker-compose.yml`:
+
+```yaml
+services:
+  superset:
+    image: ghcr.io/terrestris/superset_wfs_dialect:latest
+    ports:
+      - "8088:8088"
+    environment:
+      - SUPERSET_ENV=production
+      - DEBUG_MODE=false
+    volumes:
+      - ./superset/data:/app/superset_home
+      - ./superset_config.py:/app/pythonpath/superset_config.py:ro
+    restart: unless-stopped
+```
+
+Then start with:
+
+```bash
+docker compose up
+```
+
+Superset will be available at [http://localhost:8088/](http://localhost:8088/). Use the default credentials `admin:admin` as login.  
+Use the tag if a specific version should be used (e.g. `5.0.0rc2-wfs-0.0.1.dev3-abc1234`) instead of `latest`.
+
 ## Register the dialect
 
 The plugin can currently be installed via the test instance of the [Python Package Index](https://test.pypi.org/project/superset-wfs-dialect/):
