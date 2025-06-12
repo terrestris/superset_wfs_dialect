@@ -37,21 +37,11 @@ jobs:
       
     steps:
     - uses: actions/checkout@v4
-      
-    - name: Install Sonar Scanner
-      run: |
-        curl -sSLo sonar-scanner.zip https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-4.8.0.2856-linux.zip
-        unzip sonar-scanner.zip -d $HOME/sonar-scanner
-        echo "export PATH=$HOME/sonar-scanner/sonar-scanner-4.8.0.2856-linux/bin:$PATH" >> $HOME/.bashrc
-        source $HOME/.bashrc
+      with:
+        fetch-depth: 0
       
     - name: Run SonarQube Scan
+      uses: SonarSource/sonarqube-scan-action@v5.2.0
       env:
         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-      run: |
-        sonar-scanner \
-          -Dsonar.projectKey=superset_wfs_dialect \
-          -Dsonar.sources=superset_wfs_dialect \
-          -Dsonar.tests=superset_wfs_dialect/tests \
-          -Dsonar.python.coverage.reportPaths=superset_wfs_dialect/coverage.xml \
-          -Dsonar.host.url=https://sq.terrestris.de
+      
