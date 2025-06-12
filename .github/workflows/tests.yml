@@ -53,7 +53,7 @@ jobs:
 
     - name: Verify Coverage Report
       run: |
-        ls -l superset_wfs_dialect/coverage.xml
+        ls -l .
     
     - name: Get version 
       run: |
