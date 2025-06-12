@@ -4,13 +4,17 @@ SQLAlchemy dialect for OGC WFS as a Superset plugin.
 
 ## Register the dialect
 
-The plugin can currently be installed via the test instance of the [Python Package Index](https://test.pypi.org/project/superset-wfs-dialect/):
+Create a `requirements-local.txt` file according to the
+[superset documentation](https://superset.apache.org/docs/configuration/databases#2-install-the-driver-in-the-container)
+and insert following line:
 
-```bash
-pip install -i https://test.pypi.org/simple/ superset-wfs-dialect
+```
+superset_wfs_dialect
 ```
 
-The dialect must then be registered in the the local `superset_config.py`:
+The dialect must then be registered in your superset config file,
+e.g. `superset_config_docker.py` when using the
+[docker setup](https://superset.apache.org/docs/configuration/databases#2-install-the-driver-in-the-container):
 
 ```python
 from sqlalchemy.dialects import registry
@@ -18,6 +22,15 @@ registry.register("wfs", "superset_wfs_dialect.dialect", "WfsDialect")
 ```
 
 Start/restart superset and continue as described in the [Start the application section](#start-the-application).
+
+## Add a WFS database connection:
+
+- select Data > Connect database in the submenu
+- choose "Other" at the list of "Supported Databases"
+- insert the SQLAlchemy URI to a WFS `wfs://[...]` (i.e. replace `https://` of your WFS URL with `wfs://`)
+- test the connection
+- create a dataset
+- create a chart/dashboard
 
 ## Development
 
@@ -64,23 +77,14 @@ When in development mode, open <a
   </a>. Otherwise, please open the corresponding URL to the installed superset instance.
 <!-- markdownlint-enable MD033 -->
 
-To add a new database:
-
-- select Data > Connect database in the submenu
-- choose "Other" at the list of "Supported Databases"
-- insert the SQLAlchemy URI to a WFS (`wfs://[...]`)
-- test the connection
-- create a dataset
-- create a chart/dashboard
-
-## Publishing a Development Version to TestPyPI
+## Publishing a Development Version to PyPI
 
 ### Requirements
 
 - You must be on the main branch
 - Your working directory must be clean (no uncommitted changes)
 - You have push access to the repository
-- A valid `TEST_PYPI_TOKEN` is configured in GitHub Secrets (used by the GitHub Actions workflow)
+- A valid `PYPI_TOKEN` is configured in GitHub Secrets (used by the GitHub Actions workflow)
 
 ### Releasing a new version
 
