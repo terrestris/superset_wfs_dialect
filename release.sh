@@ -12,7 +12,7 @@ VERSION="$1"
 TAG="v$VERSION"
 
 if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  echo "Version must be in the format X.Y.Z (no dev suffix!)"
+  echo "Version must be in the format X.Y.Z"
   exit 1
 fi
 
