@@ -1,8 +1,8 @@
 name: Tests
 
 on:
-  push:
-    branches: [ main ]
+  push: 
+    branches: ['*']
   pull_request:
     branches: [ main ]
 
@@ -15,18 +15,47 @@ jobs:
     steps:
     - uses: actions/checkout@v4
 
-    - name: Install git (required for installing OWSLib from Git)
-      run: |
-        apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
-
     - name: Install dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -e .
-        pip install "git+https://github.com/geopython/OWSLib.git@master"
-        pip install pytest
+        pip install tox
 
-    - name: Run tests
+    - name: Run tests with coverage
+      run: tox -e py
+
+    - name: Upload Coverage Report
+      uses: actions/upload-artifact@v4
+      with:
+        name: coverage-report
+        path: coverage.xml
+  
+
+  sonar:
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    needs: test
+      
+    steps:
+    - uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Download Coverage Report
+      uses: actions/download-artifact@v4
+      with:
+        name: coverage-report
+
+    - name: Verify Coverage Report
       run: |
-        cd superset_wfs_dialect
-        pytest
+        ls -l coverage.xml
+    
+    - name: Get version 
+      run: |
+        echo "sonar.projectVersion=$(git describe --tags --abbrev=0 | sed 's/^v//')" >> ./sonar-project.properties
+      
+    - name: Run SonarQube Scan
+      uses: SonarSource/sonarqube-scan-action@v5.2.0
+      env:
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+        

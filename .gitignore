@@ -8,3 +8,5 @@ venv
 build
 sql_log.csv
 dist
+coverage.xml
+.coverage
