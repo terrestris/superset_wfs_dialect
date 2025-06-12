@@ -16,9 +16,6 @@ setup(
     url='https://github.com/terrestris/superset_wfs_dialect',
     packages=find_packages(),
     install_requires=requirements,
-    classifiers=[
-        "Development Status :: 3 - Alpha",
-    ],
     entry_points={
         'sqlalchemy.dialects': [
             'wfs = superset_wfs_dialect.dialect:WfsDialect',

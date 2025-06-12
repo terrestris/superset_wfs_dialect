@@ -3,16 +3,16 @@
 set -euo pipefail
 
 if [ $# -ne 1 ]; then
-  echo "Usage: ./release.sh <version>"
-  echo "Example: ./release.sh 0.0.1"
+  echo "Usage: ./release-dev.sh <version>"
+  echo "Example: ./release-dev.sh 0.0.1dev2"
   exit 1
 fi
 
 VERSION="$1"
 TAG="v$VERSION"
 
-if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-  echo "Version must be in the format X.Y.Z (no dev suffix!)"
+if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(dev[0-9]+)?$ ]]; then
+  echo "Version must be in the format X.Y.Z or X.Y.ZdevN"
   exit 1
 fi
 
@@ -27,7 +27,7 @@ if [[ -n $(git status --porcelain) ]]; then
   exit 1
 fi
 
-echo "You are about to release version: $VERSION (PyPI)"
+echo "You are about to release version: $VERSION (TestPyPI)"
 read -p "Do you want to continue? [y/N]: " CONFIRM
 if [[ "$CONFIRM" != "y" && "$CONFIRM" != "Y" ]]; then
   echo "Release aborted."
@@ -48,9 +48,9 @@ git push
 git tag "$TAG"
 git push origin "$TAG"
 
-echo "Building and uploading to PyPI..."
+echo "Building and uploading to TestPyPI..."
 rm -rf dist/
 python3 -m build
-python3 -m twine upload dist/*
+python3 -m twine upload --repository testpypi dist/*
 
-echo "Released version $VERSION as tag $TAG (PyPI)"
+echo "Released version $VERSION as tag $TAG (TestPyPI)"
