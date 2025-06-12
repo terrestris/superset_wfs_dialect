@@ -48,9 +48,4 @@ git push
 git tag "$TAG"
 git push origin "$TAG"
 
-echo "Building and uploading to PyPI..."
-rm -rf dist/
-python3 -m build
-python3 -m twine upload dist/*
-
-echo "Released version $VERSION as tag $TAG (PyPI)"
+echo "Released version $VERSION as tag $TAG"
