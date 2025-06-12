@@ -1,3 +1,8 @@
+[![Coverage](https://sq.terrestris.de/api/project_badges/measure?project=superset_wfs_dialect&metric=coverage&token=sqb_88a5e9f0f1eba432a07a9cd20ae27a6c4337271a)](https://sq.terrestris.de/dashboard?id=superset_wfs_dialect)
+[![Reliability Rating](https://sq.terrestris.de/api/project_badges/measure?project=superset_wfs_dialect&metric=software_quality_reliability_rating&token=sqb_88a5e9f0f1eba432a07a9cd20ae27a6c4337271a)](https://sq.terrestris.de/dashboard?id=superset_wfs_dialect)
+[![Maintainability Rating](https://sq.terrestris.de/api/project_badges/measure?project=superset_wfs_dialect&metric=software_quality_maintainability_rating&token=sqb_88a5e9f0f1eba432a07a9cd20ae27a6c4337271a)](https://sq.terrestris.de/dashboard?id=superset_wfs_dialect)
+[![Security Rating](https://sq.terrestris.de/api/project_badges/measure?project=superset_wfs_dialect&metric=software_quality_security_rating&token=sqb_88a5e9f0f1eba432a07a9cd20ae27a6c4337271a)](https://sq.terrestris.de/dashboard?id=superset_wfs_dialect)
+
 # SQLAlchemy dialect for OGC WFS
 
 SQLAlchemy dialect for OGC WFS as a Superset plugin.
