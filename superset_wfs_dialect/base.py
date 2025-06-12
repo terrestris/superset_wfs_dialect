@@ -72,6 +72,21 @@ class Cursor:
         filterXml = self._extract_filter(ast)
         aggregation_info = self._get_aggregationinfo(ast)
 
+        if ast.args.get("distinct"):
+            if len(self.propertynames) == 1:
+                col = self.propertynames[0]
+                alias = self.requested_columns.get(col, col)
+                all_features = self._fetch_all_features(self.typename, filterXml)
+                unique_values = sorted({str(f.get(col)) for f in all_features if f.get(col) is not None})
+                self.data = [(v,) for v in unique_values]
+                self.requested_columns = {alias: alias}
+                self.rowcount = len(self.data)
+                self.description = [(alias, self._get_column_type(alias), None, None, None, None, True)]
+                self._index = 0
+                return
+            else:
+                raise ValueError("DISTINCT is only supported for single column queries")
+
         logger.info("Requesting WFS layer %s", self.typename)
 
         all_features = self._fetch_all_features(self.typename, filterXml)
@@ -504,8 +519,11 @@ class Cursor:
         """Returns the type of the column."""
         return "string"
 
-    def _get_row_values(self, row: Dict[str, Any]) -> tuple:
+    def _get_row_values(self, row: Any) -> tuple:
         """Returns the values in the correct order."""
+        # If row is already a tuple (DISTINCT-Block), just return it
+        if isinstance(row, tuple):
+            return row
         if not self.requested_columns:
             # For SELECT * all columns in the order in which they appear
             return tuple(row.values())
