@@ -7,7 +7,7 @@ from io import BytesIO
 import xml.etree.ElementTree as ET
 from typing import Optional, List, Dict, Any, Tuple
 from owslib.wfs import WebFeatureService
-from owslib.fes2 import *
+from owslib.fes2 import Filter, And, PropertyIsEqualTo, PropertyIsNotEqualTo, PropertyIsGreaterThan, PropertyIsGreaterThanOrEqualTo, PropertyIsLessThan, PropertyIsLessThanOrEqualTo
 from owslib.feature.wfs200 import WebFeatureService_2_0_0
 from .gml_parser import GMLParser
 from .sql_logger import SQLLogger
@@ -31,8 +31,8 @@ class Connection:
 
     def cursor(self):
         return Cursor(self)
-
-    def close(self):
+    
+    def close(self): 
         pass
 
     def commit(self):
@@ -202,7 +202,7 @@ class Cursor:
             total_features = self._get_feature_count(typename=typename)
             if total_features / limit > 100:
                 # reduce requests if there are too many features to never reach 100 requests
-                limit = self._round_up_to_nearest_power(total_features / 100)
+                limit = self._round_up_to_nearest_power(n=(total_features / 100))
 
         startindex = 0
         all_features = []
@@ -249,18 +249,17 @@ class Cursor:
                 agg_prop = agg_info["propertyname"]
                 agg_alias = agg_info.get("alias", None)
 
-                if agg_class == sqlglot.exp.Avg:
-                    agg_value = sum(float(f.get(agg_prop, 0)) for f in features) / len(features)
-                elif agg_class == sqlglot.exp.Sum:
-                    agg_value = sum(float(f.get(agg_prop, 0)) for f in features)
-                elif agg_class == sqlglot.exp.Count:
-                    agg_value = len(features)
-                elif agg_class == sqlglot.exp.Max:
-                    agg_value = max(float(f.get(agg_prop, 0)) for f in features)
-                elif agg_class == sqlglot.exp.Min:
-                    agg_value = min(float(f.get(agg_prop, 0)) for f in features)
-                else:
+                aggregation_functions = {
+                    sqlglot.exp.Avg: lambda: sum(float(f.get(agg_prop, 0)) for f in features) / len(features),
+                    sqlglot.exp.Sum: lambda: sum(float(f.get(agg_prop, 0)) for f in features),
+                    sqlglot.exp.Count: lambda: len(features),
+                    sqlglot.exp.Max: lambda: max(float(f.get(agg_prop, 0)) for f in features),
+                    sqlglot.exp.Min: lambda: min(float(f.get(agg_prop, 0)) for f in features),
+                }
+
+                if agg_class not in aggregation_functions:
                     raise ValueError("Unsupported aggregation class")
+                agg_value = aggregation_functions[agg_class]()
                 aggregated_data[-1][agg_alias if agg_alias else agg_prop] = agg_value
 
         return aggregated_data
@@ -282,7 +281,7 @@ class Cursor:
                 # Also, ordering by metric expressions is currently unsupported.
                 data.sort(key=lambda row: row.get(order_col), reverse=reverse)
 
-    def _round_up_to_nearest_power(n):
+    def _round_up_to_nearest_power(self, n):
         base = 10 ** math.floor(math.log10(n))
         if n <= base:
             return base
