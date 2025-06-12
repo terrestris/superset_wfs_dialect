@@ -31,6 +31,12 @@ jobs:
         cd superset_wfs_dialect
         pytest --cov=superset_wfs_dialect --cov-report=xml
 
+    - name: Upload Coverage Report
+      uses: actions/upload-artifact@v3
+      with:
+          name: coverage-report
+          path: superset_wfs_dialect/coverage.xml
+
   sonar:
     needs: test
     runs-on: ubuntu-latest
@@ -39,6 +45,15 @@ jobs:
     - uses: actions/checkout@v4
       with:
         fetch-depth: 0
+
+    - name: Download Coverage Report
+      uses: actions/download-artifact@v3
+      with:
+        name: coverage-report
+
+    - name: Verify Coverage Report
+      run: |
+        ls -l superset_wfs_dialect/coverage.xml
     
     - name: Get version 
       run: |
