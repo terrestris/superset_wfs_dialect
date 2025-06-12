@@ -53,7 +53,7 @@ jobs:
 
     - name: Verify Coverage Report
       run: |
-        ls -l .
+        ls -l coverage.xml
     
     - name: Get version 
       run: |
