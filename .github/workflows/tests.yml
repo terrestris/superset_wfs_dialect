@@ -25,7 +25,7 @@ jobs:
         pip install -e .
         pip install "git+https://github.com/geopython/OWSLib.git@master"
         pip install tox
-        
+
     - name: Run tests with coverage
       run: tox -e py
 
@@ -63,4 +63,3 @@ jobs:
       uses: SonarSource/sonarqube-scan-action@v5.2.0
       env:
         SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
-      
