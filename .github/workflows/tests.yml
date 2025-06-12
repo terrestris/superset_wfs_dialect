@@ -1,8 +1,8 @@
 name: Tests
 
 on:
-  push:
-    branches: [ main ]
+  push: 
+    branches: ['*']
   pull_request:
     branches: [ main ]
 
@@ -24,9 +24,33 @@ jobs:
         python -m pip install --upgrade pip
         pip install -e .
         pip install "git+https://github.com/geopython/OWSLib.git@master"
-        pip install pytest
+        pip install pytest pytest-cov
 
-    - name: Run tests
+    - name: Run tests with coverage
       run: |
         cd superset_wfs_dialect
-        pytest
+        pytest --cov=superset_wfs_dialect --cov-report=xml
+
+  sonar:
+    needs: test
+    runs-on: ubuntu-latest
+      
+    steps:
+    - uses: actions/checkout@v4
+      
+    - name: Install Sonar Scanner
+      run: |
+        curl -sSLo sonar-scanner.zip https://binaries.sonarsource.com/Distribution/sonar-scanner-cli/sonar-scanner-cli-4.8.0.2856-linux.zip
+        unzip sonar-scanner.zip -d $HOME
+        export PATH="$HOME/sonar-scanner-4.8.0.2856-linux/bin:$PATH"
+      
+    - name: Run SonarQube Scan
+      env:
+        SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      run: |
+        sonar-scanner \
+          -Dsonar.projectKey=superset_wfs_dialect \
+          -Dsonar.sources=superset_wfs_dialect \
+          -Dsonar.tests=superset_wfs_dialect/tests \
+          -Dsonar.python.coverage.reportPaths=superset_wfs_dialect/coverage.xml \
+          -Dsonar.host.url=https://sq.terrestris.de
