@@ -82,26 +82,26 @@ To add a new database:
 - You have push access to the repository
 - A valid `TEST_PYPI_TOKEN` is configured in GitHub Secrets (used by the GitHub Actions workflow)
 
-### Releasing a dev version
+### Releasing a new version
 
-1. Run the release script with the desired version number (e.g. `0.0.1dev2`):
+1. Run the release script with the desired version number (e.g. `0.0.1`):
 
     ```bash
-    ./release.sh 0.0.1dev2
+    ./release.sh 0.0.1
     ```
 
     This will:
 
     - Update the `version` field in `setup.py`
     - Commit the change to `main`
-    - Create a Git tag e.g. `0.0.1dev2`
+    - Create a Git tag e.g. `0.0.1`
     - Push the tag to GitHub
 
 2. The GitHub Actions workflow will be triggered by the tag:
 
     - It will build the package
-    - Upload it to TestPyPI
+    - Upload it to PyPI
 
 ### Notes
 
-- Versions must follow the format `X.Y.Z` or `X.Y.ZdevN` (e.g. `0.1.0dev3`)
+- Versions must follow the format `X.Y.Z` (e.g. `0.1.0`)

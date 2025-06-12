@@ -4,15 +4,15 @@ set -euo pipefail
 
 if [ $# -ne 1 ]; then
   echo "Usage: ./release.sh <version>"
-  echo "Example: ./release.sh 0.0.1dev2"
+  echo "Example: ./release.sh 0.0.1"
   exit 1
 fi
 
 VERSION="$1"
 TAG="v$VERSION"
 
-if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(dev[0-9]+)?$ ]]; then
-  echo "Version must be in the format X.Y.Z or X.Y.ZdevN"
+if [[ ! "$VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+  echo "Version must be in the format X.Y.Z"
   exit 1
 fi
 
@@ -27,7 +27,7 @@ if [[ -n $(git status --porcelain) ]]; then
   exit 1
 fi
 
-echo "You are about to release version: $VERSION"
+echo "You are about to release version: $VERSION (PyPI)"
 read -p "Do you want to continue? [y/N]: " CONFIRM
 if [[ "$CONFIRM" != "y" && "$CONFIRM" != "Y" ]]; then
   echo "Release aborted."

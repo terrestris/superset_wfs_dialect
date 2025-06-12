@@ -1,12 +1,12 @@
-name: Publish dev release to TestPyPI
+name: Publish release to PyPI
 
 on:
   push:
     tags:
-      - '*dev*'
+      - '[0-9]+.[0-9]+.[0-9]+'
 
 jobs:
-  publish-testpypi:
+  publish-pypi:
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -29,9 +29,9 @@ jobs:
         run: |
           python -m build
 
-      - name: Upload to TestPyPI
+      - name: Upload to PyPI
         env:
           TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.TEST_PYPI_TOKEN }}
+          TWINE_PASSWORD: ${{ secrets.PYPI_TOKEN }}
         run: |
-          twine upload --repository testpypi dist/*
+          twine upload dist/*
