@@ -24,21 +24,24 @@ jobs:
         python -m pip install --upgrade pip
         pip install -e .
         pip install "git+https://github.com/geopython/OWSLib.git@master"
-        pip install pytest pytest-cov
+        pip install pytest tox
 
-    - name: Run tests with coverage
+    - name: Run tests 
       run: |
         cd superset_wfs_dialect
-        pytest --cov=superset_wfs_dialect --cov-report=xml
+        pytest 
+
+    - name: Run tox
+      run: tox -e py
 
     - name: Upload Coverage Report
       uses: actions/upload-artifact@v4
       with:
-          name: coverage-report
-          path: superset_wfs_dialect/coverage.xml
+        name: coverage-report
+        path: coverage.xml
+  
 
   sonar:
-    needs: test
     runs-on: ubuntu-latest
       
     steps:
