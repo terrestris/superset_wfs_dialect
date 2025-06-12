@@ -19,19 +19,7 @@ jobs:
       run: |
         apt-get update && apt-get install -y git && rm -rf /var/lib/apt/lists/*
 
-    - name: Install dependencies
-      run: |
-        python -m pip install --upgrade pip
-        pip install -e .
-        pip install "git+https://github.com/geopython/OWSLib.git@master"
-        pip install pytest tox
-
-    - name: Run tests 
-      run: |
-        cd superset_wfs_dialect
-        pytest 
-
-    - name: Run tox
+    - name: Run tests with coverage
       run: tox -e py
 
     - name: Upload Coverage Report
