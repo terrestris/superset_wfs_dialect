@@ -369,14 +369,18 @@ class Cursor:
 
         propertyname = None if filterXml and self.propertynames == ["*"] else self.propertynames
 
-        response: BytesIO = wfs.getfeature(
-            typename=typename,
-            maxfeatures=limit,
-            propertyname=propertyname,
-            filter=filterXml,
-            startindex=startindex,
-            method='POST' if filterXml else 'GET'
-        )
+        params = {
+            "typename": typename,
+            "maxfeatures": limit,
+            "startindex": startindex,
+            "method": "POST" if filterXml else "GET"
+        }
+        if filterXml:
+            params["filter"] = filterXml
+        else:
+            params["propertyname"] = propertyname
+
+        response: BytesIO = wfs.getfeature(**params)
 
         gmlparser = GMLParser(
             geometry_column=self.connection.wfs.get_schema(self.typename).get("geometry_column")
