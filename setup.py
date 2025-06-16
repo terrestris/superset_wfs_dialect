@@ -5,7 +5,7 @@ with open('requirements.txt') as f:
 
 setup(
     name="superset_wfs_dialect",
-    version="0.0.1",
+    version="0.0.2",
     description="SQLAlchemy dialect for OGC WFS",
     license="Apache-2.0",
     long_description=open("README.md").read(),
