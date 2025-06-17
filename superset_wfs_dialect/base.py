@@ -7,7 +7,19 @@ from io import BytesIO
 import xml.etree.ElementTree as ET
 from typing import Optional, List, Dict, Any, Tuple
 from owslib.wfs import WebFeatureService
-from owslib.fes2 import Filter, And, PropertyIsEqualTo, PropertyIsNotEqualTo, PropertyIsGreaterThan, PropertyIsGreaterThanOrEqualTo, PropertyIsLessThan, PropertyIsLessThanOrEqualTo
+from owslib.fes2 import (
+    And,
+    Filter,
+    Not,
+    Or,
+    PropertyIsEqualTo,
+    PropertyIsGreaterThan,
+    PropertyIsGreaterThanOrEqualTo,
+    PropertyIsLessThan,
+    PropertyIsLessThanOrEqualTo,
+    PropertyIsLike,
+    PropertyIsNotEqualTo,
+)
 from owslib.feature.wfs200 import WebFeatureService_2_0_0
 from .gml_parser import GMLParser
 from .sql_logger import SQLLogger
@@ -31,8 +43,8 @@ class Connection:
 
     def cursor(self):
         return Cursor(self)
-    
-    def close(self): 
+
+    def close(self):
         pass
 
     def commit(self):
@@ -436,7 +448,7 @@ class Cursor:
 
         return aggregation_info
 
-    def _get_filter_from_expression(self, expression, is_root: bool = True) -> str:
+    def _get_filter_from_expression(self, expression, is_root: bool = True) -> Filter:
         supported_expressions = [
             sqlglot.expressions.EQ,
             sqlglot.expressions.NEQ,
@@ -445,21 +457,32 @@ class Cursor:
             sqlglot.expressions.LT,
             sqlglot.expressions.LTE,
             sqlglot.expressions.And,
-            # sqlglot.expressions.In,
-            # sqlglot.expressions.Not,
+            sqlglot.expressions.In,
+            sqlglot.expressions.Not,
+            sqlglot.expressions.Paren,
+            sqlglot.expressions.Like,
         ]
 
         if not isinstance(expression, tuple(supported_expressions)):
             raise ValueError("Unsupported filter expression:", expression.__class__.__name__)
 
         filter = None
-
+        # Handle parentheses
+        if isinstance(expression, sqlglot.expressions.Paren):
+            inner_expression = expression.this
+            filter = self._get_filter_from_expression(inner_expression, is_root=False)
+            return Filter(filter) if is_root else filter
         # Handle AND
-        if isinstance(expression, sqlglot.expressions.And):
+        elif isinstance(expression, sqlglot.expressions.And):
             filter = And([
                 self._get_filter_from_expression(expression.this, is_root=False),
                 self._get_filter_from_expression(expression.args["expression"], is_root=False)
             ])
+        # Handle NOT
+        elif isinstance(expression, sqlglot.expressions.Not):
+            inner_expression = expression.this
+            innerFilter = self._get_filter_from_expression(inner_expression, is_root=False)
+            filter = Not([innerFilter])
         # Handle equality
         elif isinstance(expression, sqlglot.expressions.EQ):
             propertyname = expression.this.name
@@ -470,6 +493,18 @@ class Cursor:
             propertyname = expression.this.name
             literal = expression.args["expression"].name
             filter = PropertyIsNotEqualTo(propertyname=propertyname, literal=literal)
+        # Handle LIKE
+        elif isinstance(expression, sqlglot.expressions.Like):
+            matchcase = False
+            if isinstance(expression.this, sqlglot.expressions.Lower):
+                # If the expression is a LOWER function, we need to extract the property name
+                propertyname = expression.this.this.name
+                matchcase
+            else:
+                # Otherwise, it is a simple column reference
+                propertyname = expression.this.name
+            literal = expression.args["expression"].name
+            filter = PropertyIsLike(propertyname=propertyname, literal=literal, matchCase=matchcase)
         # Handle greater than
         elif isinstance(expression, sqlglot.expressions.GT):
             propertyname = expression.this.name
@@ -490,6 +525,19 @@ class Cursor:
             propertyname = expression.this.name
             literal = expression.args["expression"].name
             filter = PropertyIsLessThanOrEqualTo(propertyname=propertyname, literal=literal)
+        # Handle in
+        elif isinstance(expression, sqlglot.expressions.In):
+            propertyname = expression.this.name
+            literals = [lit.name for lit in expression.args["expressions"]]
+            if len(literals) == 1:
+                # If there is only one literal, use equality instead of IN
+                filter = PropertyIsEqualTo(propertyname=propertyname, literal=literals[0])
+            else:
+                # Combine multiple IN conditions with OR
+                subfilters = [
+                    PropertyIsEqualTo(propertyname=propertyname, literal=lit) for lit in literals
+                ]
+                filter = Or(subfilters)
 
         if not filter:
             raise ValueError("Unsupported filter expression")
