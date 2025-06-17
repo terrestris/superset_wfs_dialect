@@ -449,6 +449,12 @@ class Cursor:
         return aggregation_info
 
     def _get_filter_from_expression(self, expression, is_root: bool = True) -> Filter:
+        """
+        Converts a sqlglot expression into an OWSLib filter.
+        :param expression: The sqlglot expression to convert
+        :param is_root: Whether this is the root filter (should be wrapped in a Filter object)
+        :return: An OWSLib Filter object
+        """
         supported_expressions = [
             sqlglot.expressions.EQ,
             sqlglot.expressions.NEQ,
@@ -499,7 +505,7 @@ class Cursor:
             if isinstance(expression.this, sqlglot.expressions.Lower):
                 # If the expression is a LOWER function, we need to extract the property name
                 propertyname = expression.this.this.name
-                matchcase
+                matchcase = False
             else:
                 # Otherwise, it is a simple column reference
                 propertyname = expression.this.name
