@@ -22,8 +22,8 @@ body:
     id: superset-version
     attributes:
       label: Apache Superset Version
-      description: Welche Version von Apache Superset verwenden Sie?
-      placeholder: z.B. 3.0.0
+      description: Welche Image Version von Apache Superset verwenden Sie?
+      placeholder: ghcr.io/terrestris/superset:5.0.0rc2-b3330534659235c84bf3750eaf8436f9e83ae785
     validations:
       required: true
 
@@ -53,19 +53,14 @@ body:
     id: screenshots
     attributes:
       label: Screenshots
-      description: Wenn möglich, fügen Sie Screenshots hinzu, um das Problem zu veranschaulichen. Sie können Bilder einfach in dieses Feld ziehen und ablegen.
+      description: Optional können Sie Screenshots hinzufügen, die das Problem verdeutlichen.
       placeholder: Ziehen Sie Bilder hierher, um sie hochzuladen...
-
-  - type: textarea
-    id: logs
-    attributes:
-      label: Relevante Log-Ausgaben
-      description: Bitte kopieren Sie relevante Log-Ausgaben hier hinein. Dies wird automatisch als Code formatiert.
-      render: shell
 
   - type: textarea
     id: sql-query
     attributes:
       label: SQL-Query
-      description: Falls zutreffend, fügen Sie hier die generierte SQL-Query ein.
+      description: |
+        Optional können Sie hier den SQL-Code einfügen, der von Superset generiert wurde.
+        Diesen finden Sie unter dem Punkt "View query" im Menü am Chart.
       render: sql
