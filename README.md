@@ -1,9 +1,9 @@
+# SQLAlchemy dialect for OGC WFS
+
 [![Coverage](https://sq.terrestris.de/api/project_badges/measure?project=superset_wfs_dialect&metric=coverage&token=sqb_88a5e9f0f1eba432a07a9cd20ae27a6c4337271a)](https://sq.terrestris.de/dashboard?id=superset_wfs_dialect)
 [![Reliability Rating](https://sq.terrestris.de/api/project_badges/measure?project=superset_wfs_dialect&metric=software_quality_reliability_rating&token=sqb_88a5e9f0f1eba432a07a9cd20ae27a6c4337271a)](https://sq.terrestris.de/dashboard?id=superset_wfs_dialect)
 [![Maintainability Rating](https://sq.terrestris.de/api/project_badges/measure?project=superset_wfs_dialect&metric=software_quality_maintainability_rating&token=sqb_88a5e9f0f1eba432a07a9cd20ae27a6c4337271a)](https://sq.terrestris.de/dashboard?id=superset_wfs_dialect)
 [![Security Rating](https://sq.terrestris.de/api/project_badges/measure?project=superset_wfs_dialect&metric=software_quality_security_rating&token=sqb_88a5e9f0f1eba432a07a9cd20ae27a6c4337271a)](https://sq.terrestris.de/dashboard?id=superset_wfs_dialect)
-
-# SQLAlchemy dialect for OGC WFS
 
 SQLAlchemy dialect for OGC WFS as a Superset plugin.
 
@@ -28,11 +28,12 @@ registry.register("wfs", "superset_wfs_dialect.dialect", "WfsDialect")
 
 Start/restart superset and continue as described in the [Start the application section](#start-the-application).
 
-## Add a WFS database connection:
+## Add a WFS database connection
 
 - select Data > Connect database in the submenu
 - choose "Other" at the list of "Supported Databases"
 - insert the SQLAlchemy URI to a WFS `wfs://[...]` (i.e. replace `https://` of your WFS URL with `wfs://`)
+- if the service is secured via BasicAuth, the login details must be entered in the URL and is therefore stored unencrypted (`wfs://username:password@[...]`)
 - test the connection
 - create a dataset
 - create a chart/dashboard
