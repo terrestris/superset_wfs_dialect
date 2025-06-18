@@ -104,7 +104,7 @@ class Cursor:
         all_features = self._fetch_all_features(self.typename, filterXml)
         aggregated_data = self._aggregate_features(all_features, aggregation_info)
         self._apply_limit(aggregated_data, limit)
-        # self._apply_order(ast, aggregated_data, aggregation_info)
+        self._apply_order(ast, aggregated_data, aggregation_info)
 
         self.data = aggregated_data
         self.rowcount = len(self.data)
@@ -280,18 +280,42 @@ class Cursor:
         if row_limit is not None:
             data[:] = data[:row_limit]
 
-    # ORDER BY may refer to a column or to an aggregated metric expression,
-    # and thus requires more context to resolve correctly
-    # TODO: Implement proper ordering support based on expression analysis.
+    # ORDER BY may refer to a column or to an aggregated metric expression
     def _apply_order(self, ast, data, aggregation_info):
         order_expr = ast.args.get("order")
-        if order_expr:
-            for order in order_expr.expressions:
+        if not order_expr:
+            return
+        for order in order_expr.expressions:
+            # default: sort by column name
+            order_col = None
+            reverse = order.args.get("desc", False)
+
+            # metric or column
+            if hasattr(order.this, 'name'):
+                # column
                 order_col = order.this.name
-                reverse = order.args.get("desc", False)
-                # This assumes order_col is a plain column name, which is not always true.
-                # Also, ordering by metric expressions is currently unsupported.
-                data.sort(key=lambda row: row.get(order_col), reverse=reverse)
+            elif hasattr(order.this, 'sql') and hasattr(order.this, 'args'):
+                # aggregated metric
+                metric_func = order.this.__class__.__name__.upper()
+                metric_col = order.this.args.get('this').name if order.this.args.get('this') else None
+
+                agg_alias = None
+                for agg in aggregation_info:
+                    if (
+                        agg["class"].__name__.upper() == metric_func and
+                        agg["propertyname"] == metric_col
+                    ):
+                        agg_alias = agg.get("alias") or metric_col
+                        break
+                order_col = agg_alias or f"{metric_func.lower()}_{metric_col}"
+            else:
+                order_col = str(order.this)
+
+            # None vlaues will be set to the end (ASC) or beginning (DESC)
+            def sort_key(row):
+                val = row.get(order_col)
+                return (val is None, val)
+            data.sort(key=sort_key, reverse=reverse)
 
     def _round_up_to_nearest_power(self, n):
         base = 10 ** math.floor(math.log10(n))
@@ -611,7 +635,6 @@ def connect(*args, **kwargs):
     base_url = kwargs.get("base_url", "https://localhost/geoserver/ows")
     username = kwargs.get("username")
     password = kwargs.get("password")
-    print(args, kwargs)
     return Connection(base_url=base_url, username=username, password=password)
 
 class FakeDbApi:

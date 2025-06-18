@@ -56,6 +56,86 @@ class TestCursor(unittest.TestCase):
 
         self.assertIn("Invalid SQL query", str(context.exception))
 
+class TestApplyOrder(unittest.TestCase):
+    def setUp(self):
+        self.cursor = Cursor(MagicMock())
+
+    def test_sort_by_column_asc(self):
+        data = [
+            {"name": "B"},
+            {"name": "a"},
+            {"name": "C"},
+            {"name": None},
+        ]
+        class DummyOrder:
+            def __init__(self, name, desc=False):
+                self.this = MagicMock()
+                self.this.name = name
+                self.args = {"desc": desc}
+        class DummyOrderExpr:
+            expressions = [DummyOrder("name", desc=False)]
+        ast = MagicMock()
+        ast.args = {"order": DummyOrderExpr()}
+        self.cursor._apply_order(ast, data, aggregation_info=[])
+        self.assertEqual([row["name"] for row in data], ["B", "C", "a", None])
+
+    def test_sort_by_column_desc(self):
+        data = [
+            {"name": "B"},
+            {"name": "a"},
+            {"name": "C"},
+            {"name": None},
+        ]
+        class DummyOrder:
+            def __init__(self, name, desc=True):
+                self.this = MagicMock()
+                self.this.name = name
+                self.args = {"desc": desc}
+        class DummyOrderExpr:
+            expressions = [DummyOrder("name", desc=True)]
+        ast = MagicMock()
+        ast.args = {"order": DummyOrderExpr()}
+        self.cursor._apply_order(ast, data, aggregation_info=[])
+        self.assertEqual([row["name"] for row in data], [None, "a", "C", "B"])
+
+    def test_sort_by_metric_alias(self):
+        data = [
+            {"gattung": "A", "AVG(baumhoehe)": 2},
+            {"gattung": "B", "AVG(baumhoehe)": 1},
+            {"gattung": "C", "AVG(baumhoehe)": 3},
+        ]
+        class DummyOrder:
+            def __init__(self, name, desc=False):
+                self.this = MagicMock()
+                self.this.name = name
+                self.args = {"desc": desc}
+        class DummyOrderExpr:
+            expressions = [DummyOrder("AVG(baumhoehe)", desc=False)]
+        ast = MagicMock()
+        ast.args = {"order": DummyOrderExpr()}
+        aggregation_info = [{"class": MagicMock(__name__="Avg"), "propertyname": "baumhoehe", "alias": "AVG(baumhoehe)"}]
+        self.cursor._apply_order(ast, data, aggregation_info=aggregation_info)
+        self.assertEqual([row["gattung"] for row in data], ["B", "A", "C"])
+
+    def test_case_sensitive_sort(self):
+        data = [
+            {"name": "a"},
+            {"name": "B"},
+            {"name": "A"},
+            {"name": "b"},
+        ]
+        class DummyOrder:
+            def __init__(self, name, desc=False):
+                self.this = MagicMock()
+                self.this.name = name
+                self.args = {"desc": desc}
+        class DummyOrderExpr:
+            expressions = [DummyOrder("name", desc=False)]
+        ast = MagicMock()
+        ast.args = {"order": DummyOrderExpr()}
+        self.cursor._apply_order(ast, data, aggregation_info=[])
+        self.assertEqual([row["name"] for row in data], ["A", "B", "a", "b"])
+
 if __name__ == "__main__":
     unittest.main()
 
