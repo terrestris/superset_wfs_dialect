@@ -1,0 +1,70 @@
+name: Fehlermeldung
+description: Melden Sie einen Fehler im WFS-Dialekt
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Danke, dass Sie sich die Zeit nehmen, einen Fehler zu melden!
+
+  - type: input
+    id: version
+    attributes:
+      label: Superset-WFS-Dialekt Version
+      description: Welche Version des WFS-Dialekts verwenden Sie?
+      placeholder: z.B. 1.0.0
+    validations:
+      required: true
+
+  - type: input
+    id: superset-version
+    attributes:
+      label: Apache Superset Version
+      description: Welche Version von Apache Superset verwenden Sie?
+      placeholder: z.B. 3.0.0
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: Was ist passiert?
+      description: Beschreiben Sie auch, was Sie stattdessen erwartet haben!
+      placeholder: "Beschreiben Sie das Problem so detailliert wie möglich..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Schritte zur Reproduktion
+      description: Wie können wir das Problem nachvollziehen?
+      placeholder: |
+        1. Gehen Sie zu '...'
+        2. Klicken Sie auf '....'
+        3. Führen Sie folgende Query aus '....'
+        4. Der Fehler tritt auf
+    validations:
+      required: true
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: Wenn möglich, fügen Sie Screenshots hinzu, um das Problem zu veranschaulichen. Sie können Bilder einfach in dieses Feld ziehen und ablegen.
+      placeholder: Ziehen Sie Bilder hierher, um sie hochzuladen...
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevante Log-Ausgaben
+      description: Bitte kopieren Sie relevante Log-Ausgaben hier hinein. Dies wird automatisch als Code formatiert.
+      render: shell
+
+  - type: textarea
+    id: sql-query
+    attributes:
+      label: SQL-Query
+      description: Falls zutreffend, fügen Sie hier die generierte SQL-Query ein.
+      render: sql
