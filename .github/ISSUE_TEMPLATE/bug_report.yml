@@ -2,6 +2,7 @@ name: Fehlermeldung
 description: Melden Sie einen Fehler im WFS-Dialekt
 title: "[Bug]: "
 labels: ["bug"]
+projects: ["terrestris/1"]
 body:
   - type: markdown
     attributes:
