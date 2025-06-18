@@ -314,7 +314,14 @@ class Cursor:
             # None vlaues will be set to the end (ASC) or beginning (DESC)
             def sort_key(row):
                 val = row.get(order_col)
-                return (val is None, val)
+                # None values always last (ASC) or first (DESC)
+                if val is None:
+                    return (True, None)
+                # Try to sort numerically if possible
+                try:
+                    return (False, float(val))
+                except (TypeError, ValueError):
+                    return (False, str(val))
             data.sort(key=sort_key, reverse=reverse)
 
     def _round_up_to_nearest_power(self, n):
