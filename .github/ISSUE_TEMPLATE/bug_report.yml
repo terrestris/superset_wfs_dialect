@@ -1,0 +1,66 @@
+name: Fehlermeldung
+description: Melden Sie einen Fehler im WFS-Dialekt
+title: "[Bug]: "
+labels: ["bug"]
+projects: ["terrestris/1"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Danke, dass Sie sich die Zeit nehmen, einen Fehler zu melden!
+
+  - type: input
+    id: version
+    attributes:
+      label: Superset-WFS-Dialekt Version
+      description: Welche Version des WFS-Dialekts verwenden Sie?
+      placeholder: z.B. 1.0.0
+    validations:
+      required: true
+
+  - type: input
+    id: superset-version
+    attributes:
+      label: Apache Superset Version
+      description: Welche Image Version von Apache Superset verwenden Sie?
+      placeholder: ghcr.io/terrestris/superset:5.0.0rc2-b3330534659235c84bf3750eaf8436f9e83ae785
+    validations:
+      required: true
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: Was ist passiert?
+      description: Beschreiben Sie auch, was Sie stattdessen erwartet haben!
+      placeholder: "Beschreiben Sie das Problem so detailliert wie möglich..."
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Schritte zur Reproduktion
+      description: Wie können wir das Problem nachvollziehen?
+      placeholder: |
+        1. Gehen Sie zu '...'
+        2. Klicken Sie auf '....'
+        3. Führen Sie folgende Query aus '....'
+        4. Der Fehler tritt auf
+    validations:
+      required: true
+
+  - type: textarea
+    id: screenshots
+    attributes:
+      label: Screenshots
+      description: Optional können Sie Screenshots hinzufügen, die das Problem verdeutlichen.
+      placeholder: Ziehen Sie Bilder hierher, um sie hochzuladen...
+
+  - type: textarea
+    id: sql-query
+    attributes:
+      label: SQL-Query
+      description: |
+        Optional können Sie hier den SQL-Code einfügen, der von Superset generiert wurde.
+        Diesen finden Sie unter dem Punkt "View query" im Menü am Chart.
+      render: sql
