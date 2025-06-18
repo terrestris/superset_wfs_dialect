@@ -271,14 +271,12 @@ class Cursor:
     # ORDER BY may refer to a column or to an aggregated metric expression
     def _apply_order(self, ast, data, aggregation_info):
         order_expr = ast.args.get("order")
-        logger.info("_apply_order: order_expr=%s", order_expr)
         if not order_expr:
             return
         for order in order_expr.expressions:
             # default: sort by column name
             order_col = None
             reverse = order.args.get("desc", False)
-            logger.info("_apply_order: order.this=%s, order.args=%s", order.this, order.args)
 
             # metric or column
             if hasattr(order.this, 'name'):
@@ -301,14 +299,11 @@ class Cursor:
             else:
                 order_col = str(order.this)
 
-            logger.info("_apply_order: order_col=%s, reverse=%s", order_col, reverse)
-            logger.info("_apply_order: data before sort: %s", data)
             # None vlaues will be set to the end (ASC) or beginning (DESC)
             def sort_key(row):
                 val = row.get(order_col)
                 return (val is None, val)
             data.sort(key=sort_key, reverse=reverse)
-            logger.info("_apply_order: data after sort: %s", data)
 
     def _round_up_to_nearest_power(self, n):
         base = 10 ** math.floor(math.log10(n))
