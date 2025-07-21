@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import patch, MagicMock
 from superset_wfs_dialect.base import Connection, Cursor
+import sqlglot
 
 class TestConnection(unittest.TestCase):
     @patch("superset_wfs_dialect.base.WebFeatureService")
@@ -135,6 +136,59 @@ class TestApplyOrder(unittest.TestCase):
         ast.args = {"order": DummyOrderExpr()}
         self.cursor._apply_order(ast, data, aggregation_info=[])
         self.assertEqual([row["name"] for row in data], ["A", "B", "a", "b"])
+
+    def test_count_aggregation(self):
+        cursor = Cursor(MagicMock())
+
+        all_features = [
+            {"group": "A", "type": "x"},
+            {"group": "A", "type": "x"},
+            {"group": "A", "type": "y"},
+            {"group": "B", "type": "x"},
+        ]
+
+        aggregation_info = [{
+            "class": sqlglot.exp.Count,
+            "propertyname": "type",
+            "alias": "COUNT(type)",
+            "groupby": "group"
+        }]
+
+        result = cursor._aggregate_features(all_features, aggregation_info)
+
+        expected = [
+            {"group": "A", "COUNT(type)": 3},
+            {"group": "B", "COUNT(type)": 1}
+        ]
+
+        self.assertEqual(result, expected)
+
+    def test_count_distinct_aggregation(self):
+        cursor = Cursor(MagicMock())
+
+        all_features = [
+            {"group": "A", "type": "x"},
+            {"group": "A", "type": "x"},
+            {"group": "A", "type": "y"},
+            {"group": "B", "type": "x"},
+            {"group": "B", "type": "x"},
+        ]
+
+        aggregation_info = [{
+            "class": "count_distinct",
+            "propertyname": "type",
+            "alias": "COUNT_DISTINCT(type)",
+            "groupby": "group"
+        }]
+
+        result = cursor._aggregate_features(all_features, aggregation_info)
+
+        expected = [
+            {"group": "A", "COUNT_DISTINCT(type)": 2},
+            {"group": "B", "COUNT_DISTINCT(type)": 1},
+        ]
+
+        self.assertEqual(result, expected)
 
 if __name__ == "__main__":
     unittest.main()
