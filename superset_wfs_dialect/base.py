@@ -265,6 +265,7 @@ class Cursor:
                     sqlglot.exp.Avg: lambda: sum(float(f.get(agg_prop, 0)) for f in features) / len(features),
                     sqlglot.exp.Sum: lambda: sum(float(f.get(agg_prop, 0)) for f in features),
                     sqlglot.exp.Count: lambda: len(features),
+                    "count_distinct": lambda: len(set(f.get(agg_prop) for f in features if f.get(agg_prop) is not None)),
                     sqlglot.exp.Max: lambda: max(float(f.get(agg_prop, 0)) for f in features),
                     sqlglot.exp.Min: lambda: min(float(f.get(agg_prop, 0)) for f in features),
                 }
@@ -446,7 +447,6 @@ class Cursor:
             sqlglot.exp.Avg,
             sqlglot.exp.Sum,
             sqlglot.exp.Count,
-            # handle CountDistinct
             sqlglot.exp.Max,
             sqlglot.exp.Min
         ]
@@ -457,8 +457,22 @@ class Cursor:
             aggregation = ast.find_all(cls)
 
             for agg in aggregation:
-                aggregation_class = cls
-                aggregation_property = agg.this.name
+                if isinstance(agg, sqlglot.exp.Count) and isinstance(agg.this, sqlglot.exp.Distinct):
+                    aggregation_class = "count_distinct"
+                else:
+                    aggregation_class = cls
+                if isinstance(agg.this, sqlglot.exp.Column):
+                    aggregation_property = agg.this.name
+
+                elif isinstance(agg.this, sqlglot.exp.Distinct):
+                    expressions = agg.this.args.get("expressions", [])
+                    if expressions and isinstance(expressions[0], sqlglot.exp.Column):
+                        aggregation_property = expressions[0].name
+                    else:
+                        aggregation_property = None
+                else:
+                    aggregation_property = None
+
                 aggregation_alias = agg.parent.alias_or_name
 
                 if not aggregation_class:
