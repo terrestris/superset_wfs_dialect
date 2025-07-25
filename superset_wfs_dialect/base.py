@@ -23,6 +23,7 @@ from owslib.fes2 import (
 from owslib.feature.wfs200 import WebFeatureService_2_0_0
 from .gml_parser import GMLParser
 from .sql_logger import SQLLogger
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -216,22 +217,33 @@ class Cursor:
                 # reduce requests if there are too many features to never reach 100 requests
                 limit = self._round_up_to_nearest_power(n=(total_features / 100))
 
-        startindex = 0
-        all_features = []
-        logger.info("Fetching features for aggregation")
-        while True:
-            # Fetch features with pagination
+        total_features = self._get_feature_count(typename=typename, filterXml=filterXml)
+        start_indices = list(range(0, total_features, limit))
+
+        logger.info("Fetching %d features in %d parallel requests (limit per chunk: %d)",
+                    total_features, len(start_indices), limit)
+
+        def fetch_chunk(startindex):
             logger.info("Fetching features from %s to %s", startindex, startindex + limit)
-            features = self._get_features(
+            return self._get_features(
                 typename=typename,
                 limit=limit,
                 filterXml=filterXml,
                 startindex=startindex
             )
-            if not features:
-                break
-            all_features.extend(features)
-            startindex += len(features)
+
+        all_features = []
+        with ThreadPoolExecutor(max_workers=5) as executor:
+            futures = {executor.submit(fetch_chunk, idx): idx for idx in start_indices}
+            for future in as_completed(futures):
+                start_idx = futures[future]
+                try:
+                    result = future.result()
+                    if result:
+                        all_features.extend(result)
+                except Exception as e:
+                    logger.warning("Error fetching features for startindex %s: %s", start_idx, e)
+
         return all_features
 
     def _aggregate_features(self, all_features, aggregation_info):
