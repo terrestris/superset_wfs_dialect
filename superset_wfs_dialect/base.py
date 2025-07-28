@@ -207,7 +207,7 @@ class Cursor:
 
         gmlparser = GMLParser(
             geometry_column=self.connection.wfs.get_schema(typename).get("geometry_column"),
-            srs_name=self.connection.wfs.contents[typename].crsOptions[0]
+            srs_name=str(self.connection.wfs.contents[typename].crsOptions[0])
         )
 
         limit = 10000

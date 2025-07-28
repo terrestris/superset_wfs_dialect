@@ -1,6 +1,10 @@
 from typing import List, Dict
 import xml.etree.ElementTree as ET
 from pyproj import CRS
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class GMLParser:
     """
@@ -16,17 +20,18 @@ class GMLParser:
             srs_name: The spatial reference system name
         """
         self._geometry_column = geometry_column
-        self._srs_name = srs_name if isinstance(srs_name, str) else str(srs_name)
+        self._srs_name = srs_name
 
         try:
             crs = CRS.from_user_input(self._srs_name)
-            if crs.is_geographic and crs.axis_info[0].direction in ["north"]:
+            if crs.axis_info[0].direction in ["north"]:
                 self.x_index = 1
                 self.y_index = 0
             else:
                 self.x_index = 0
                 self.y_index = 1
         except Exception as e:
+            logger.warning(f"Error parsing SRS name '{self._srs_name}': {e}")
             self.x_index = 0
             self.y_index = 1
 
@@ -84,7 +89,7 @@ class GMLParser:
         """Parse a GML Point element into WKT format."""
         pos = elem.find('./gml:pos', {'gml': 'http://www.opengis.net/gml/3.2'})
         if pos is not None:
-            coords = list(map(float, pos.text.strip().split()))
+            coords = list(pos.text.strip().split())
             return f"POINT({coords[self.x_index]} {coords[self.y_index]})"
         raise ValueError("Invalid Point format")
 
@@ -117,7 +122,7 @@ class GMLParser:
         ns = {'gml': 'http://www.opengis.net/gml/3.2'}
         points = []
         for point in elem.findall('.//gml:Point/gml:pos', ns):
-            coords = list(map(float, point.text.strip().split()))
+            coords = list(point.text.strip().split())
             points.append(f"({coords[self.x_index]} {coords[self.y_index]})")
         return f"MULTIPOINT({', '.join(points)})"
 
