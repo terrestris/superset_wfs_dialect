@@ -41,10 +41,17 @@ class GMLParser:
                 tag = elem.tag.split("}")[-1]
 
                 if tag == self._geometry_column:
-                    gml_elem = list(elem)[0]
-                    props[tag] = self._gml_to_wkt(gml_elem)
-                elif elem.text and elem.text.strip():
-                    props[tag] = elem.text.strip()
+                    gml_elem = elem.find('./*')
+                    if gml_elem is not None:
+                        wkt = self._gml_to_wkt(gml_elem)
+                        if wkt:
+                            props[tag] = wkt
+                else:
+                    text = elem.text
+                    if text:
+                        stripped = text.strip()
+                        if stripped:
+                            props[tag] = stripped
             if props:
                 features.append(props)
         return features
