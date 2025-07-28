@@ -427,8 +427,6 @@ class Cursor:
         filterXml: Optional[str] = None,
         startindex: Optional[int] = None,
     ) -> List[Dict[str, Any]]:
-        if gmlparser is None:
-            raise ValueError("A GMLParser instance must be provided.")
         wfs = self.connection.wfs
 
         propertyname = None if filterXml and self.propertynames == ["*"] else self.propertynames
