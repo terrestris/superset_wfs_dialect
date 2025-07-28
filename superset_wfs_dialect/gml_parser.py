@@ -1,19 +1,42 @@
 from typing import List, Dict
 import xml.etree.ElementTree as ET
+from pyproj import CRS
+import logging
+
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 class GMLParser:
     """
     A class to parse GML (Geography Markup Language) data.
     """
 
-    def __init__(self, geometry_column: str):
+    def __init__(self, geometry_column: str, srs_name: str):
         """
         Initialize the GMLParser with the geometry column name.
 
         Args:
             geometry_column: The name of the geometry column
+            srs_name: The spatial reference system name
         """
         self._geometry_column = geometry_column
+        self._srs_name = srs_name
+
+        try:
+            crs = CRS.from_user_input(self._srs_name)
+            if crs.axis_info[0].direction in ["north"]:
+                self.x_index = 1
+                self.y_index = 0
+            else:
+                self.x_index = 0
+                self.y_index = 1
+        except Exception as e:
+            logger.warning(
+                f"Cannot identify CRS by name '{self._srs_name}'. "
+                f"Defaulting to 'easting'."
+            )
+            self.x_index = 0
+            self.y_index = 1
 
     def parse(self, xml_text: str) -> List[Dict[str, str]]:
         """Parse GML XML response into a list of feature dictionaries.
@@ -61,15 +84,16 @@ class GMLParser:
         coords = pos_text.strip().split()
         coord_pairs = []
         for i in range(0, len(coords), 2):
-            coord_pairs.append(f"{coords[i]} {coords[i+1]}")
+            pair = (coords[i], coords[i+1])
+            coord_pairs.append(f"{pair[self.x_index]} {pair[self.y_index]}")
         return ", ".join(coord_pairs)
 
     def _parse_point(self, elem):
         """Parse a GML Point element into WKT format."""
         pos = elem.find('./gml:pos', {'gml': 'http://www.opengis.net/gml/3.2'})
         if pos is not None:
-            coords = pos.text.strip()
-            return f"POINT({coords})"
+            coords = pos.text.strip().split()
+            return f"POINT({coords[self.x_index]} {coords[self.y_index]})"
         raise ValueError("Invalid Point format")
 
     def _parse_linestring(self, elem):
@@ -101,7 +125,8 @@ class GMLParser:
         ns = {'gml': 'http://www.opengis.net/gml/3.2'}
         points = []
         for point in elem.findall('.//gml:Point/gml:pos', ns):
-            points.append(f"({point.text.strip()})")
+            coords = point.text.strip().split()
+            points.append(f"({coords[self.x_index]} {coords[self.y_index]})")
         return f"MULTIPOINT({', '.join(points)})"
 
     def _parse_multilinestring(self, elem):

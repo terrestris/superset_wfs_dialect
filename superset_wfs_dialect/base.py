@@ -205,6 +205,11 @@ class Cursor:
         # If we have an aggregation, we have to recursively call the WFS until all features are fetched
         # and then aggregate them in Python
 
+        gmlparser = GMLParser(
+            geometry_column=self.connection.wfs.get_schema(typename).get("geometry_column"),
+            srs_name=str(self.connection.wfs.contents[typename].crsOptions[0])
+        )
+
         limit = 10000
 
         # fetch as many features as possible with one request
@@ -227,6 +232,7 @@ class Cursor:
             logger.info("Fetching features from %s to %s", startindex, startindex + limit)
             return self._get_features(
                 typename=typename,
+                gmlparser=gmlparser,
                 limit=limit,
                 filterXml=filterXml,
                 startindex=startindex
@@ -416,6 +422,7 @@ class Cursor:
     def _get_features(
         self,
         typename: str,
+        gmlparser: GMLParser,
         limit: Optional[int] = None,
         filterXml: Optional[str] = None,
         startindex: Optional[int] = None,
@@ -436,10 +443,6 @@ class Cursor:
             params["propertyname"] = propertyname
 
         response: BytesIO = wfs.getfeature(**params)
-
-        gmlparser = GMLParser(
-            geometry_column=self.connection.wfs.get_schema(self.typename).get("geometry_column")
-        )
 
         try:
             xml_text = response.read().decode("utf-8")
