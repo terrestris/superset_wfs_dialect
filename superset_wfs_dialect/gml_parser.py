@@ -31,7 +31,10 @@ class GMLParser:
                 self.x_index = 0
                 self.y_index = 1
         except Exception as e:
-            logger.warning(f"Error parsing SRS name '{self._srs_name}': {e}")
+            logger.warning(
+                f"Cannot identify CRS by name '{self._srs_name}'. "
+                f"Defaulting to 'easting'."
+            )
             self.x_index = 0
             self.y_index = 1
 
@@ -89,7 +92,7 @@ class GMLParser:
         """Parse a GML Point element into WKT format."""
         pos = elem.find('./gml:pos', {'gml': 'http://www.opengis.net/gml/3.2'})
         if pos is not None:
-            coords = list(pos.text.strip().split())
+            coords = pos.text.strip().split()
             return f"POINT({coords[self.x_index]} {coords[self.y_index]})"
         raise ValueError("Invalid Point format")
 
@@ -122,7 +125,7 @@ class GMLParser:
         ns = {'gml': 'http://www.opengis.net/gml/3.2'}
         points = []
         for point in elem.findall('.//gml:Point/gml:pos', ns):
-            coords = list(point.text.strip().split())
+            coords = point.text.strip().split()
             points.append(f"({coords[self.x_index]} {coords[self.y_index]})")
         return f"MULTIPOINT({', '.join(points)})"
 
