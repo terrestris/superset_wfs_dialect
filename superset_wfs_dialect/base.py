@@ -23,7 +23,6 @@ from owslib.fes2 import (
 from owslib.feature.wfs200 import WebFeatureService_2_0_0
 from .gml_parser import GMLParser
 from .sql_logger import SQLLogger
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -205,11 +204,6 @@ class Cursor:
         # If we have an aggregation, we have to recursively call the WFS until all features are fetched
         # and then aggregate them in Python
 
-        gmlparser = GMLParser(
-            geometry_column=self.connection.wfs.get_schema(typename).get("geometry_column"),
-            srs_name=str(self.connection.wfs.contents[typename].crsOptions[0])
-        )
-
         limit = 10000
 
         # fetch as many features as possible with one request
@@ -222,33 +216,24 @@ class Cursor:
                 # reduce requests if there are too many features to never reach 100 requests
                 limit = self._round_up_to_nearest_power(n=(total_features / 100))
 
-        total_features = self._get_feature_count(typename=typename, filterXml=filterXml)
-        start_indices = list(range(0, total_features, limit))
+        startindex = 0
+        all_features = []
+        logger.info("Fetching features for aggregation")
+        while True:
+            # Fetch features with pagination
 
-        logger.info("Fetching %d features in %d parallel requests (limit per chunk: %d)",
-                    total_features, len(start_indices), limit)
 
-        def fetch_chunk(startindex):
             logger.info("Fetching features from %s to %s", startindex, startindex + limit)
-            return self._get_features(
+            features = self._get_features(
                 typename=typename,
-                gmlparser=gmlparser,
                 limit=limit,
                 filterXml=filterXml,
                 startindex=startindex
             )
-
-        all_features = []
-        with ThreadPoolExecutor(max_workers=5) as executor:
-            futures = {executor.submit(fetch_chunk, idx): idx for idx in start_indices}
-            for future in as_completed(futures):
-                start_idx = futures[future]
-                try:
-                    result = future.result()
-                    if result:
-                        all_features.extend(result)
-                except Exception as e:
-                    logger.warning("Error fetching features for startindex %s: %s", start_idx, e)
+            if not features:
+                break
+            all_features.extend(features)
+            startindex += len(features)
 
         return all_features
 
@@ -422,7 +407,6 @@ class Cursor:
     def _get_features(
         self,
         typename: str,
-        gmlparser: GMLParser,
         limit: Optional[int] = None,
         filterXml: Optional[str] = None,
         startindex: Optional[int] = None,
@@ -443,6 +427,10 @@ class Cursor:
             params["propertyname"] = propertyname
 
         response: BytesIO = wfs.getfeature(**params)
+        gmlparser = GMLParser(
+            geometry_column=self.connection.wfs.get_schema(typename).get("geometry_column"),
+            srs_name=str(self.connection.wfs.contents[typename].crsOptions[0])
+        )
 
         try:
             xml_text = response.read().decode("utf-8")
