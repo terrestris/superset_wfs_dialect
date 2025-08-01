@@ -22,6 +22,7 @@ from owslib.fes2 import (
 )
 from owslib.feature.wfs200 import WebFeatureService_2_0_0
 from .gml_parser import GMLParser
+from .wkt_parser import WKTParser
 from .sql_logger import SQLLogger
 
 logging.basicConfig(level=logging.INFO)
@@ -196,7 +197,7 @@ class Cursor:
         if where_expr:
             filter = self._get_filter_from_expression(where_expr.this)
             filterXml = ET.tostring(filter.toXML()).decode("utf-8")
-            logger.debug("Filter: %s", filterXml)
+            logger.info("### WFS Filter XML:\n%s", filterXml)
             return filterXml
         return None
 
@@ -208,10 +209,12 @@ class Cursor:
 
         # fetch as many features as possible with one request
         server_side_maxfeatures = self._get_server_side_max_features(typename=typename)
+        logger.info("### Server-side maximum features: %s", server_side_maxfeatures)
         if server_side_maxfeatures is not None:
             limit = server_side_maxfeatures
         else:
             total_features = self._get_feature_count(typename=typename)
+            logger.info("### Total features available: %s", total_features)
             if total_features / limit > 100:
                 # reduce requests if there are too many features to never reach 100 requests
                 limit = self._round_up_to_nearest_power(n=(total_features / 100))
@@ -344,6 +347,7 @@ class Cursor:
 
         # TODO: use self.connection.wfs.getcapabilities() !Does not support typename parameter!
         url = f"{base_url}?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetCapabilities&typename={typename}"
+        logger.info("#### GetCapabilities URL used: %s", url)
         requests.get(url)
         response = requests.get(url)
         if response.status_code == 200:
@@ -371,7 +375,8 @@ class Cursor:
         base_url = self.connection.base_url
         # TODO: use self.connection.wfs.getfeature() !Does not support resultType!
         url = f"{base_url}?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&typename={typename}&resultType=hits"
-
+        logger.info("### Filter XML: %s", filterXml)
+        logger.info("#### URL: %s", url)
         response = None
         if filterXml:
             auth = None
@@ -583,15 +588,30 @@ class Cursor:
         elif isinstance(expression, sqlglot.expressions.In):
             propertyname = expression.this.name
             literals = [lit.name for lit in expression.args["expressions"]]
-            if len(literals) == 1:
-                # If there is only one literal, use equality instead of IN
-                filter = PropertyIsEqualTo(propertyname=propertyname, literal=literals[0])
-            else:
-                # Combine multiple IN conditions with OR
+            
+            wktparser = WKTParser()
+
+            if all(lit.startswith("SRID=") for lit in literals):
                 subfilters = [
-                    PropertyIsEqualTo(propertyname=propertyname, literal=lit) for lit in literals
+                    wktparser.parse(propertyname, wkt) for wkt in literals
                 ]
-                filter = Or(subfilters)
+                if not subfilters:
+                    raise ValueError("No valid WKT geometries provided in filter")
+                elif len(subfilters) == 1:
+                    filter = subfilters[0]
+                else:
+                    filter = Or(subfilters)
+            else:
+                if len(literals) == 1:
+                    filter = PropertyIsEqualTo(propertyname=propertyname, literal=literals[0])
+                else:
+                    # Combine multiple IN conditions with OR
+                    subfilters = [
+                        PropertyIsEqualTo(propertyname=propertyname, literal=lit)
+                        for lit in literals
+                    ]
+                    filter = Or(subfilters)
+            logger.info("######## Filter: %s", filter)
 
         if not filter:
             raise ValueError("Unsupported filter expression")
