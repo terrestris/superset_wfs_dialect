@@ -26,7 +26,7 @@ class WKTParser:
             raise ValueError(f"Unsupported geometry format: {wkt}")
         srid_part, geom_part = wkt.split(";", 1)
         self._srid = srid_part.split("=")[1]
-        logger.info(
+        logger.debug(
             f"### Parsed SRID: {self._srid}, Geometry part: {geom_part}")
         return geom_part
 
@@ -42,7 +42,7 @@ class WKTParser:
                 self.y_index = 1
         except Exception:
             logger.warning(
-                f"Cannot identify CRS by id '{self._srid}'. Defaulting to 'easting'."
+                f"Cannot identify axis order of CRS '{self._srid}'. Defaulting to 'easting'."
             )
             self.x_index = 0
             self.y_index = 1

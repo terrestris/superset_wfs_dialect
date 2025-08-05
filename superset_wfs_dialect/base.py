@@ -197,7 +197,7 @@ class Cursor:
         if where_expr:
             filter = self._get_filter_from_expression(where_expr.this)
             filterXml = ET.tostring(filter.toXML()).decode("utf-8")
-            logger.info("### WFS Filter XML:\n%s", filterXml)
+            logger.debug("### WFS Filter XML:\n%s", filterXml)
             return filterXml
         return None
 
@@ -209,19 +209,19 @@ class Cursor:
 
         # fetch as many features as possible with one request
         server_side_maxfeatures = self._get_server_side_max_features(typename=typename)
-        logger.info("### Server-side maximum features: %s", server_side_maxfeatures)
+        logger.debug("### Server-side maximum features: %s", server_side_maxfeatures)
         if server_side_maxfeatures is not None:
             limit = server_side_maxfeatures
         else:
             total_features = self._get_feature_count(typename=typename)
-            logger.info("### Total features available: %s", total_features)
+            logger.debug("### Total features available: %s", total_features)
             if total_features / limit > 100:
                 # reduce requests if there are too many features to never reach 100 requests
                 limit = self._round_up_to_nearest_power(n=(total_features / 100))
 
         startindex = 0
         all_features = []
-        logger.info("Fetching features for aggregation")
+        logger.debug("Fetching features for aggregation")
         while True:
             # Fetch features with pagination
 
@@ -347,19 +347,19 @@ class Cursor:
 
         # TODO: use self.connection.wfs.getcapabilities() !Does not support typename parameter!
         url = f"{base_url}?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetCapabilities&typename={typename}"
-        logger.info("#### GetCapabilities URL used: %s", url)
+        logger.debug("#### GetCapabilities URL used: %s", url)
         response = requests.get(url)
         if response.status_code == 200:
             try:
                 capabilities_ast = ET.fromstring(response.text)
             except ET.ParseError as e:
-                logger.error("Fehler beim Parsen der WFS-Antwort: %s", e)
-                raise ValueError("Fehler beim Parsen der WFS-Antwort")
+                logger.error("Error when parsing the WFS response: %s", e)
+                raise ValueError("Error when parsing the WFS response")
 
             # this is version 2.0.0 specific and could be different in 1.1.0
             count_default_element = capabilities_ast.find(".//ows:Constraint[@name='CountDefault']/ows:DefaultValue", namespaces={"ows": "http://www.opengis.net/ows/1.1"})
             if count_default_element is None:
-                logger.info("Error when fetching the CountDefault elements")
+                logger.error("Error when fetching the CountDefault elements")
                 return None
 
             count_default = int(count_default_element.text)
@@ -374,8 +374,8 @@ class Cursor:
         base_url = self.connection.base_url
         # TODO: use self.connection.wfs.getfeature() !Does not support resultType!
         url = f"{base_url}?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&typename={typename}&resultType=hits"
-        logger.info("### Filter XML: %s", filterXml)
-        logger.info("#### URL: %s", url)
+        logger.debug("### Filter XML: %s", filterXml)
+        logger.debug("#### URL: %s", url)
         response = None
         if filterXml:
             auth = None
@@ -610,7 +610,7 @@ class Cursor:
                         for lit in literals
                     ]
                     filter = Or(subfilters)
-            logger.info("######## Filter: %s", filter)
+            logger.debug("######## Filter: %s", filter)
 
         if not filter:
             raise ValueError("Unsupported filter expression")
