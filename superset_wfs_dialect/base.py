@@ -348,7 +348,6 @@ class Cursor:
         # TODO: use self.connection.wfs.getcapabilities() !Does not support typename parameter!
         url = f"{base_url}?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetCapabilities&typename={typename}"
         logger.info("#### GetCapabilities URL used: %s", url)
-        requests.get(url)
         response = requests.get(url)
         if response.status_code == 200:
             try:
