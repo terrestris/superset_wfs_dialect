@@ -22,8 +22,8 @@ from owslib.fes2 import (
 )
 from owslib.feature.wfs200 import WebFeatureService_2_0_0
 from .gml_parser import GMLParser
+from .wkt_parser import WKTParser
 from .sql_logger import SQLLogger
-from concurrent.futures import ThreadPoolExecutor, as_completed
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -197,7 +197,7 @@ class Cursor:
         if where_expr:
             filter = self._get_filter_from_expression(where_expr.this)
             filterXml = ET.tostring(filter.toXML()).decode("utf-8")
-            logger.debug("Filter: %s", filterXml)
+            logger.debug("### WFS Filter XML:\n%s", filterXml)
             return filterXml
         return None
 
@@ -205,50 +205,38 @@ class Cursor:
         # If we have an aggregation, we have to recursively call the WFS until all features are fetched
         # and then aggregate them in Python
 
-        gmlparser = GMLParser(
-            geometry_column=self.connection.wfs.get_schema(typename).get("geometry_column"),
-            srs_name=str(self.connection.wfs.contents[typename].crsOptions[0])
-        )
-
         limit = 10000
 
         # fetch as many features as possible with one request
         server_side_maxfeatures = self._get_server_side_max_features(typename=typename)
+        logger.debug("### Server-side maximum features: %s", server_side_maxfeatures)
         if server_side_maxfeatures is not None:
             limit = server_side_maxfeatures
         else:
             total_features = self._get_feature_count(typename=typename)
+            logger.debug("### Total features available: %s", total_features)
             if total_features / limit > 100:
                 # reduce requests if there are too many features to never reach 100 requests
                 limit = self._round_up_to_nearest_power(n=(total_features / 100))
 
-        total_features = self._get_feature_count(typename=typename, filterXml=filterXml)
-        start_indices = list(range(0, total_features, limit))
+        startindex = 0
+        all_features = []
+        logger.debug("Fetching features for aggregation")
+        while True:
+            # Fetch features with pagination
 
-        logger.info("Fetching %d features in %d parallel requests (limit per chunk: %d)",
-                    total_features, len(start_indices), limit)
 
-        def fetch_chunk(startindex):
             logger.info("Fetching features from %s to %s", startindex, startindex + limit)
-            return self._get_features(
+            features = self._get_features(
                 typename=typename,
-                gmlparser=gmlparser,
                 limit=limit,
                 filterXml=filterXml,
                 startindex=startindex
             )
-
-        all_features = []
-        with ThreadPoolExecutor(max_workers=5) as executor:
-            futures = {executor.submit(fetch_chunk, idx): idx for idx in start_indices}
-            for future in as_completed(futures):
-                start_idx = futures[future]
-                try:
-                    result = future.result()
-                    if result:
-                        all_features.extend(result)
-                except Exception as e:
-                    logger.warning("Error fetching features for startindex %s: %s", start_idx, e)
+            if not features:
+                break
+            all_features.extend(features)
+            startindex += len(features)
 
         return all_features
 
@@ -359,19 +347,19 @@ class Cursor:
 
         # TODO: use self.connection.wfs.getcapabilities() !Does not support typename parameter!
         url = f"{base_url}?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetCapabilities&typename={typename}"
-        requests.get(url)
+        logger.debug("#### GetCapabilities URL used: %s", url)
         response = requests.get(url)
         if response.status_code == 200:
             try:
                 capabilities_ast = ET.fromstring(response.text)
             except ET.ParseError as e:
-                logger.error("Fehler beim Parsen der WFS-Antwort: %s", e)
-                raise ValueError("Fehler beim Parsen der WFS-Antwort")
+                logger.error("Error when parsing the WFS response: %s", e)
+                raise ValueError("Error when parsing the WFS response")
 
             # this is version 2.0.0 specific and could be different in 1.1.0
             count_default_element = capabilities_ast.find(".//ows:Constraint[@name='CountDefault']/ows:DefaultValue", namespaces={"ows": "http://www.opengis.net/ows/1.1"})
             if count_default_element is None:
-                logger.info("Error when fetching the CountDefault elements")
+                logger.error("Error when fetching the CountDefault elements")
                 return None
 
             count_default = int(count_default_element.text)
@@ -386,7 +374,8 @@ class Cursor:
         base_url = self.connection.base_url
         # TODO: use self.connection.wfs.getfeature() !Does not support resultType!
         url = f"{base_url}?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&typename={typename}&resultType=hits"
-
+        logger.debug("### Filter XML: %s", filterXml)
+        logger.debug("#### URL: %s", url)
         response = None
         if filterXml:
             auth = None
@@ -422,7 +411,6 @@ class Cursor:
     def _get_features(
         self,
         typename: str,
-        gmlparser: GMLParser,
         limit: Optional[int] = None,
         filterXml: Optional[str] = None,
         startindex: Optional[int] = None,
@@ -443,6 +431,10 @@ class Cursor:
             params["propertyname"] = propertyname
 
         response: BytesIO = wfs.getfeature(**params)
+        gmlparser = GMLParser(
+            geometry_column=self.connection.wfs.get_schema(typename).get("geometry_column"),
+            srs_name=str(self.connection.wfs.contents[typename].crsOptions[0])
+        )
 
         try:
             xml_text = response.read().decode("utf-8")
@@ -595,15 +587,30 @@ class Cursor:
         elif isinstance(expression, sqlglot.expressions.In):
             propertyname = expression.this.name
             literals = [lit.name for lit in expression.args["expressions"]]
-            if len(literals) == 1:
-                # If there is only one literal, use equality instead of IN
-                filter = PropertyIsEqualTo(propertyname=propertyname, literal=literals[0])
-            else:
-                # Combine multiple IN conditions with OR
+            
+            wktparser = WKTParser()
+
+            if all(lit.startswith("SRID=") for lit in literals):
                 subfilters = [
-                    PropertyIsEqualTo(propertyname=propertyname, literal=lit) for lit in literals
+                    wktparser.parse(propertyname, wkt) for wkt in literals
                 ]
-                filter = Or(subfilters)
+                if not subfilters:
+                    raise ValueError("No valid WKT geometries provided in filter")
+                elif len(subfilters) == 1:
+                    filter = subfilters[0]
+                else:
+                    filter = Or(subfilters)
+            else:
+                if len(literals) == 1:
+                    filter = PropertyIsEqualTo(propertyname=propertyname, literal=literals[0])
+                else:
+                    # Combine multiple IN conditions with OR
+                    subfilters = [
+                        PropertyIsEqualTo(propertyname=propertyname, literal=lit)
+                        for lit in literals
+                    ]
+                    filter = Or(subfilters)
+            logger.debug("######## Filter: %s", filter)
 
         if not filter:
             raise ValueError("Unsupported filter expression")
