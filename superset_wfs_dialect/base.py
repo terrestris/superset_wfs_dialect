@@ -47,7 +47,7 @@ class Connection:
 
         self.wfs: WebFeatureService_2_0_0 = WebFeatureService(**wfs_args)
 
-        # Initial DescribeFeatureType für alle verfügbaren Layer
+        # Initial DescribeFeatureType for all available layers
         self._cache_feature_types()
 
     def cursor(self):
@@ -64,49 +64,15 @@ class Connection:
 
     def _cache_feature_types(self):
         """
-        Calls DescribeFeatureType for all available layers and stores the type information
+        Get schema of every feature type and store the property types in a dictionary.
+        This is used to convert the property values to the correct type when fetching features.
         """
         for feature_type in self.wfs.contents:
-            params = {
-                "service": "WFS",
-                "version": "2.0.0",
-                "request": "DescribeFeatureType",
-                "typename": feature_type,
-                "outputFormat": "application/gml+xml; version=3.2",
-            }
-
-            auth = None
-            if self.username and self.password:
-                auth = (self.username, self.password)
-
-            try:
-                response = requests.get(self.base_url, params=params, auth=auth)
-                response.raise_for_status()
-
-                root = ET.fromstring(response.content)
-                ns = {"xs": "http://www.w3.org/2001/XMLSchema"}
-
-                property_types = {}
-
-                # Find the complexType element that contains the property definitions
-                complex_type = root.find(".//xs:complexType", ns)
-                if complex_type is not None:
-                    sequence = complex_type.find(".//xs:sequence", ns)
-                    if sequence is not None:
-                        for element in sequence.findall("xs:element", ns):
-                            name = element.get("name")
-                            type_name = element.get("type")
-                            if name and type_name:
-                                # Remove the namespace prefix (e.g. 'xs:string' -> 'string')
-                                type_name = type_name.split(":")[-1]
-                                property_types[name] = type_name
-
-                self.feature_type_info[feature_type] = property_types
-            except Exception as e:
-                logger.warning(
-                    f"Konnte DescribeFeatureType für {feature_type} nicht abrufen: {e}"
-                )
-                continue
+            schema = self.wfs.get_schema(typename=feature_type)
+            property_types = {}
+            for property_name, property_type in schema.get("properties", {}).items():
+                property_types[property_name] = property_type
+            self.feature_type_info[feature_type] = property_types
 
 
 class Cursor:
@@ -794,47 +760,6 @@ class Cursor:
 
     def close(self):
         pass
-
-    def _describe_feature_type(self, typename: str) -> Dict[str, str]:
-        """
-        Sends a DescribeFeatureType request to get the feature type schema
-        Returns a dictionary of property names and their types
-        """
-        params = {
-            "service": "WFS",
-            "version": "2.0.0",
-            "request": "DescribeFeatureType",
-            "typename": typename,
-            "outputFormat": "application/gml+xml; version=3.2",
-        }
-
-        auth = None
-        if self.connection.username and self.connection.password:
-            auth = (self.connection.username, self.connection.password)
-
-        response = requests.get(self.connection.base_url, params=params, auth=auth)
-        response.raise_for_status()
-
-        root = ET.fromstring(response.content)
-        # Der namespace für XML Schema
-        ns = {"xs": "http://www.w3.org/2001/XMLSchema"}
-
-        property_types = {}
-
-        # Finde das complexType Element, das die Eigenschaftsdefinitionen enthält
-        complex_type = root.find(".//xs:complexType", ns)
-        if complex_type is not None:
-            sequence = complex_type.find(".//xs:sequence", ns)
-            if sequence is not None:
-                for element in sequence.findall("xs:element", ns):
-                    name = element.get("name")
-                    type_name = element.get("type")
-                    if name and type_name:
-                        # Entferne den namespace prefix (z.B. 'xs:string' -> 'string')
-                        type_name = type_name.split(":")[-1]
-                        property_types[name] = type_name
-
-        return property_types
 
     def _convert_value(self, value: str, type_name: str) -> Any:
         """
