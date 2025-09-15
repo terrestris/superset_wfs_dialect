@@ -21,8 +21,9 @@ type_map = {
     "datetime": sqltypes.DateTime(),
     "time": sqltypes.Time(),
     "byte": sqltypes.Integer(),
-    "short": sqltypes.Integer()
+    "short": sqltypes.Integer(),
 }
+
 
 class WfsDialect(DefaultDialect):
     name = "wfs"
@@ -59,7 +60,7 @@ class WfsDialect(DefaultDialect):
     # TODO use GetCapabilites & DescribeFeatureType
     def get_schema_names(self, connection, **kw):
         logger.info("get_schema_names() aufgerufen")
-        return ['default']
+        return ["default"]
 
     def has_table(self, connection, table_name, schema=None):
         logger.info("has_table(schema=%s, table=%s)", schema, table_name)
@@ -91,23 +92,27 @@ class WfsDialect(DefaultDialect):
         fiona_schema = wfs.get_schema(table_name)
         columns = []
 
-        for key, value in fiona_schema.get('properties').items():
+        for key, value in fiona_schema.get("properties").items():
             coltype = type_map.get(value, sqltypes.String())
-            required = key in fiona_schema.get('required', [])
+            required = key in fiona_schema.get("required", [])
 
-            columns.append({
-                "name": key,
-                "type": coltype,
-                "nullable": not required,
+            columns.append(
+                {
+                    "name": key,
+                    "type": coltype,
+                    "nullable": not required,
+                    "default": None,
+                }
+            )
+
+        columns.append(
+            {
+                "name": fiona_schema.get("geometry_column"),
+                "type": sqltypes.String(),
+                "nullable": True,
                 "default": None,
-            })
-
-        columns.append({
-            "name": fiona_schema.get('geometry_column'),
-            "type": sqltypes.String(),
-            "nullable": True,
-            "default": None,
-        })
+            }
+        )
 
         return columns
 
