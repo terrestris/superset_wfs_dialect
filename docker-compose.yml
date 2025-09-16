@@ -27,6 +27,7 @@ services:
       - ./requirements.txt:/app/pythonpath/requirements.txt
       - ./setup.py:/app/pythonpath/setup.py
       - ./superset_config.py:/app/pythonpath/superset_config.py:ro
+      - ${SQL_LOG_PATH}:/app/sql_log.csv:rw
 
 volumes:
   superset_home:

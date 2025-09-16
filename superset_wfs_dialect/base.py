@@ -1,5 +1,6 @@
 import requests
 import math
+from datetime import datetime
 import logging
 import sqlglot
 import sqlglot.expressions
@@ -28,11 +29,15 @@ from .sql_logger import SQLLogger
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
+
 class Connection:
-    def __init__(self, base_url="https://localhost/geoserver/ows", username=None, password=None):
+    def __init__(
+        self, base_url="https://localhost/geoserver/ows", username=None, password=None
+    ):
         self.base_url = base_url
         self.username = username
         self.password = password
+        self.feature_type_info = {}
 
         wfs_args = {"url": base_url, "version": "2.0.0"}
 
@@ -41,6 +46,9 @@ class Connection:
             wfs_args["password"] = password
 
         self.wfs: WebFeatureService_2_0_0 = WebFeatureService(**wfs_args)
+
+        # Initial DescribeFeatureType for all available layers
+        self._cache_feature_types()
 
     def cursor(self):
         return Cursor(self)
@@ -54,17 +62,32 @@ class Connection:
     def rollback(self):
         pass
 
+    def _cache_feature_types(self):
+        """
+        Get schema of every feature type and store the property types in a dictionary.
+        This is used to convert the property values to the correct type when fetching features.
+        """
+        for feature_type in self.wfs.contents:
+            schema = self.wfs.get_schema(typename=feature_type)
+            property_types = {}
+            for property_name, property_type in schema.get("properties", {}).items():
+                property_types[property_name] = property_type
+            self.feature_type_info[feature_type] = property_types
+
+
 class Cursor:
     def __init__(self, connection: Connection):
         self.connection = connection
         self.data: List[Dict[str, Any]] = []
         # https://peps.python.org/pep-0249/#description
-        self.description: Optional[List[Tuple[str, str, None, None, None, None, bool]]] = None
+        self.description: Optional[
+            List[Tuple[str, str, None, None, None, None, bool]]
+        ] = None
         self._index: int = 0
         # Dict of { 'name': 'alias' } for requested columns
         self.requested_columns: Dict = {}
         self.typename: Optional[str] = None
-        self.propertynames: List[str] = ['*']
+        self.propertynames: List[str] = ["*"]
         self.sql_logger = SQLLogger()
         self.rowcount: Optional[int] = None
 
@@ -90,11 +113,15 @@ class Cursor:
                 col = self.propertynames[0]
                 alias = self.requested_columns.get(col, col)
                 all_features = self._fetch_all_features(self.typename, filterXml)
-                unique_values = sorted({str(f.get(col)) for f in all_features if f.get(col) is not None})
+                unique_values = sorted(
+                    {str(f.get(col)) for f in all_features if f.get(col) is not None}
+                )
                 self.data = [(v,) for v in unique_values]
                 self.requested_columns = {alias: alias}
                 self.rowcount = len(self.data)
-                self.description = [(alias, self._get_column_type(alias), None, None, None, None, True)]
+                self.description = [
+                    (alias, self._get_column_type(alias), None, None, None, None, True)
+                ]
                 self._index = 0
                 return
             else:
@@ -116,14 +143,12 @@ class Cursor:
         self.data = [{"dummy": 1}]
         self.description = [("dummy", "int", None, None, None, None, True)]
 
-
     # Parse SQL using sqlglot
     def _parse_sql(self, operation: str):
         try:
             return sqlglot.parse_one(operation)
         except Exception as e:
             raise ValueError(f"Invalid SQL query: {e}")
-
 
     def _extract_typename(self, ast):
         if not isinstance(ast, sqlglot.expressions.Select):
@@ -138,10 +163,10 @@ class Cursor:
         return table_expr.this.name if table_expr else None
 
     def _extract_propertynames(self, ast):
-        '''Extracts property names from the SQL AST.
+        """Extracts property names from the SQL AST.
         Returns a list of property names.
         Returns an empty list if no properties are specified.
-        '''
+        """
         propertynames = []
 
         # Get property names
@@ -164,16 +189,20 @@ class Cursor:
         return propertynames
 
     def _extract_requested_columns(self, ast):
-        '''Extracts requested columns from the SQL AST.
+        """Extracts requested columns from the SQL AST.
         Returns a dictionary of { 'property_name': 'alias' }.
         Returns an empty dictionary if no columns are specified.
-        '''
+        """
         requested_columns = {}
 
         # Get property names
         for col in ast.expressions:
             # name should be the statement before "AS"
-            name = col.this.name if isinstance(col.this, sqlglot.exp.Column) else str(col.this)
+            name = (
+                col.this.name
+                if isinstance(col.this, sqlglot.exp.Column)
+                else str(col.this)
+            )
             if not name:
                 continue
             # alias should be the statement after "AS"
@@ -182,14 +211,12 @@ class Cursor:
 
         return requested_columns
 
-
     def _extract_limit(self, ast):
         # Get Limit
         limit_expr = ast.find(sqlglot.exp.Limit)
         if limit_expr:
             return int(limit_expr.args["expression"].this)
         return None
-
 
     def _extract_filter(self, ast):
         # Get Filter
@@ -204,6 +231,9 @@ class Cursor:
     def _fetch_all_features(self, typename, filterXml):
         # If we have an aggregation, we have to recursively call the WFS until all features are fetched
         # and then aggregate them in Python
+
+        # Get the type information for this layer
+        type_info = self.connection.feature_type_info.get(typename, {})
 
         limit = 10000
 
@@ -224,17 +254,24 @@ class Cursor:
         logger.debug("Fetching features for aggregation")
         while True:
             # Fetch features with pagination
-
-
-            logger.info("Fetching features from %s to %s", startindex, startindex + limit)
+            logger.info(
+                "Fetching features from %s to %s", startindex, startindex + limit
+            )
             features = self._get_features(
                 typename=typename,
                 limit=limit,
                 filterXml=filterXml,
-                startindex=startindex
+                startindex=startindex,
             )
             if not features:
                 break
+
+            # Convert values based on type information
+            for feature in features:
+                for prop, value in feature.items():
+                    if prop in type_info:
+                        feature[prop] = self._convert_value(value, type_info[prop])
+
             all_features.extend(features)
             startindex += len(features)
 
@@ -268,12 +305,19 @@ class Cursor:
                 agg_alias = agg_info.get("alias", None)
 
                 aggregation_functions = {
-                    sqlglot.exp.Avg: lambda: sum(float(f.get(agg_prop, 0)) for f in features) / len(features),
-                    sqlglot.exp.Sum: lambda: sum(float(f.get(agg_prop, 0)) for f in features),
+                    sqlglot.exp.Avg: lambda: sum(f.get(agg_prop, 0) for f in features)
+                    / len(features),
+                    sqlglot.exp.Sum: lambda: sum(f.get(agg_prop, 0) for f in features),
                     sqlglot.exp.Count: lambda: len(features),
-                    "count_distinct": lambda: len(set(f.get(agg_prop) for f in features if f.get(agg_prop) is not None)),
-                    sqlglot.exp.Max: lambda: max(float(f.get(agg_prop, 0)) for f in features),
-                    sqlglot.exp.Min: lambda: min(float(f.get(agg_prop, 0)) for f in features),
+                    "count_distinct": lambda: len(
+                        set(
+                            f.get(agg_prop)
+                            for f in features
+                            if f.get(agg_prop) is not None
+                        )
+                    ),
+                    sqlglot.exp.Max: lambda: max(f.get(agg_prop, 0) for f in features),
+                    sqlglot.exp.Min: lambda: min(f.get(agg_prop, 0) for f in features),
                 }
 
                 if agg_class not in aggregation_functions:
@@ -298,19 +342,23 @@ class Cursor:
             reverse = order.args.get("desc", False)
 
             # metric or column
-            if hasattr(order.this, 'name'):
+            if hasattr(order.this, "name"):
                 # column
                 order_col = order.this.name
-            elif hasattr(order.this, 'sql') and hasattr(order.this, 'args'):
+            elif hasattr(order.this, "sql") and hasattr(order.this, "args"):
                 # aggregated metric
                 metric_func = order.this.__class__.__name__.upper()
-                metric_col = order.this.args.get('this').name if order.this.args.get('this') else None
+                metric_col = (
+                    order.this.args.get("this").name
+                    if order.this.args.get("this")
+                    else None
+                )
 
                 agg_alias = None
                 for agg in aggregation_info:
                     if (
-                        agg["class"].__name__.upper() == metric_func and
-                        agg["propertyname"] == metric_col
+                        agg["class"].__name__.upper() == metric_func
+                        and agg["propertyname"] == metric_col
                     ):
                         agg_alias = agg.get("alias") or metric_col
                         break
@@ -329,6 +377,7 @@ class Cursor:
                     return (False, float(val))
                 except (TypeError, ValueError):
                     return (False, str(val))
+
             data.sort(key=sort_key, reverse=reverse)
 
     def _round_up_to_nearest_power(self, n):
@@ -357,7 +406,10 @@ class Cursor:
                 raise ValueError("Error when parsing the WFS response")
 
             # this is version 2.0.0 specific and could be different in 1.1.0
-            count_default_element = capabilities_ast.find(".//ows:Constraint[@name='CountDefault']/ows:DefaultValue", namespaces={"ows": "http://www.opengis.net/ows/1.1"})
+            count_default_element = capabilities_ast.find(
+                ".//ows:Constraint[@name='CountDefault']/ows:DefaultValue",
+                namespaces={"ows": "http://www.opengis.net/ows/1.1"},
+            )
             if count_default_element is None:
                 logger.error("Error when fetching the CountDefault elements")
                 return None
@@ -385,7 +437,7 @@ class Cursor:
                 url,
                 data=filterXml,
                 headers={"Content-Type": "application/xml"},
-                auth=auth
+                auth=auth,
             )
         else:
             auth = None
@@ -400,13 +452,14 @@ class Cursor:
                 logger.error("Error while parsing the WFS answer: %s", e)
                 raise ValueError("Error while parsing the WFS answer")
 
-            count = int(count_ast.attrib['numberMatched'])
+            count = int(count_ast.attrib["numberMatched"])
             logger.info("Number of features: %s", count)
             return count
 
         else:
-            raise ValueError(f"Error when requesting the number of features: {response.status_code}")
-
+            raise ValueError(
+                f"Error when requesting the number of features: {response.status_code}"
+            )
 
     def _get_features(
         self,
@@ -417,13 +470,15 @@ class Cursor:
     ) -> List[Dict[str, Any]]:
         wfs = self.connection.wfs
 
-        propertyname = None if filterXml and self.propertynames == ["*"] else self.propertynames
+        propertyname = (
+            None if filterXml and self.propertynames == ["*"] else self.propertynames
+        )
 
         params = {
             "typename": typename,
             "maxfeatures": limit,
             "startindex": startindex,
-            "method": "POST" if filterXml else "GET"
+            "method": "POST" if filterXml else "GET",
         }
         if filterXml:
             params["filter"] = filterXml
@@ -432,8 +487,10 @@ class Cursor:
 
         response: BytesIO = wfs.getfeature(**params)
         gmlparser = GMLParser(
-            geometry_column=self.connection.wfs.get_schema(typename).get("geometry_column"),
-            srs_name=str(self.connection.wfs.contents[typename].crsOptions[0])
+            geometry_column=self.connection.wfs.get_schema(typename).get(
+                "geometry_column"
+            ),
+            srs_name=str(self.connection.wfs.contents[typename].crsOptions[0]),
         )
 
         try:
@@ -449,13 +506,15 @@ class Cursor:
             logger.error("Error parsing the WFS response: %s", e)
             raise
 
-    def _get_aggregationinfo(self, ast: sqlglot.expressions.Select) -> List[Dict[str, Any]]:
+    def _get_aggregationinfo(
+        self, ast: sqlglot.expressions.Select
+    ) -> List[Dict[str, Any]]:
         aggregation_classes = [
             sqlglot.exp.Avg,
             sqlglot.exp.Sum,
             sqlglot.exp.Count,
             sqlglot.exp.Max,
-            sqlglot.exp.Min
+            sqlglot.exp.Min,
         ]
 
         aggregation_info = []
@@ -464,7 +523,9 @@ class Cursor:
             aggregation = ast.find_all(cls)
 
             for agg in aggregation:
-                if isinstance(agg, sqlglot.exp.Count) and isinstance(agg.this, sqlglot.exp.Distinct):
+                if isinstance(agg, sqlglot.exp.Count) and isinstance(
+                    agg.this, sqlglot.exp.Distinct
+                ):
                     aggregation_class = "count_distinct"
                 else:
                     aggregation_class = cls
@@ -490,12 +551,14 @@ class Cursor:
                 if groupby:
                     groupby_property = groupby.find(sqlglot.exp.Column).this.name
 
-                aggregation_info.append({
-                    "class": aggregation_class,
-                    "propertyname": aggregation_property,
-                    "alias": aggregation_alias,
-                    "groupby": groupby_property
-                })
+                aggregation_info.append(
+                    {
+                        "class": aggregation_class,
+                        "propertyname": aggregation_property,
+                        "alias": aggregation_alias,
+                        "groupby": groupby_property,
+                    }
+                )
                 break
 
         return aggregation_info
@@ -522,7 +585,9 @@ class Cursor:
         ]
 
         if not isinstance(expression, tuple(supported_expressions)):
-            raise ValueError("Unsupported filter expression:", expression.__class__.__name__)
+            raise ValueError(
+                "Unsupported filter expression:", expression.__class__.__name__
+            )
 
         filter = None
         # Handle parentheses
@@ -532,14 +597,20 @@ class Cursor:
             return Filter(filter) if is_root else filter
         # Handle AND
         elif isinstance(expression, sqlglot.expressions.And):
-            filter = And([
-                self._get_filter_from_expression(expression.this, is_root=False),
-                self._get_filter_from_expression(expression.args["expression"], is_root=False)
-            ])
+            filter = And(
+                [
+                    self._get_filter_from_expression(expression.this, is_root=False),
+                    self._get_filter_from_expression(
+                        expression.args["expression"], is_root=False
+                    ),
+                ]
+            )
         # Handle NOT
         elif isinstance(expression, sqlglot.expressions.Not):
             inner_expression = expression.this
-            innerFilter = self._get_filter_from_expression(inner_expression, is_root=False)
+            innerFilter = self._get_filter_from_expression(
+                inner_expression, is_root=False
+            )
             filter = Not([innerFilter])
         # Handle equality
         elif isinstance(expression, sqlglot.expressions.EQ):
@@ -562,7 +633,9 @@ class Cursor:
                 # Otherwise, it is a simple column reference
                 propertyname = expression.this.name
             literal = expression.args["expression"].name
-            filter = PropertyIsLike(propertyname=propertyname, literal=literal, matchCase=matchcase)
+            filter = PropertyIsLike(
+                propertyname=propertyname, literal=literal, matchCase=matchcase
+            )
         # Handle greater than
         elif isinstance(expression, sqlglot.expressions.GT):
             propertyname = expression.this.name
@@ -572,7 +645,9 @@ class Cursor:
         elif isinstance(expression, sqlglot.expressions.GTE):
             propertyname = expression.this.name
             literal = expression.args["expression"].name
-            filter = PropertyIsGreaterThanOrEqualTo(propertyname=propertyname, literal=literal)
+            filter = PropertyIsGreaterThanOrEqualTo(
+                propertyname=propertyname, literal=literal
+            )
         # Handle less than
         elif isinstance(expression, sqlglot.expressions.LT):
             propertyname = expression.this.name
@@ -582,18 +657,18 @@ class Cursor:
         elif isinstance(expression, sqlglot.expressions.LTE):
             propertyname = expression.this.name
             literal = expression.args["expression"].name
-            filter = PropertyIsLessThanOrEqualTo(propertyname=propertyname, literal=literal)
+            filter = PropertyIsLessThanOrEqualTo(
+                propertyname=propertyname, literal=literal
+            )
         # Handle in
         elif isinstance(expression, sqlglot.expressions.In):
             propertyname = expression.this.name
             literals = [lit.name for lit in expression.args["expressions"]]
-            
+
             wktparser = WKTParser()
 
             if all(lit.startswith("SRID=") for lit in literals):
-                subfilters = [
-                    wktparser.parse(propertyname, wkt) for wkt in literals
-                ]
+                subfilters = [wktparser.parse(propertyname, wkt) for wkt in literals]
                 if not subfilters:
                     raise ValueError("No valid WKT geometries provided in filter")
                 elif len(subfilters) == 1:
@@ -602,7 +677,9 @@ class Cursor:
                     filter = Or(subfilters)
             else:
                 if len(literals) == 1:
-                    filter = PropertyIsEqualTo(propertyname=propertyname, literal=literals[0])
+                    filter = PropertyIsEqualTo(
+                        propertyname=propertyname, literal=literals[0]
+                    )
                 else:
                     # Combine multiple IN conditions with OR
                     subfilters = [
@@ -628,12 +705,14 @@ class Cursor:
         if not self.requested_columns:
             # For SELECT * all columns in the order in which they appear
             description = [
-                (col, self._get_column_type(col), None, None, None, None, True) for col in self.data[0].keys()
+                (col, self._get_column_type(col), None, None, None, None, True)
+                for col in self.data[0].keys()
             ]
         else:
             # Otherwise only the requested columns in the correct order
             description = [
-                (col, self._get_column_type(col), None, None, None, None, True) for col in self.requested_columns.values()
+                (col, self._get_column_type(col), None, None, None, None, True)
+                for col in self.requested_columns.values()
             ]
 
         return description
@@ -667,18 +746,49 @@ class Cursor:
 
     def fetchmany(self, size=1):
         end = self._index + size
-        rows = [self._get_row_values(row) for row in self.data[self._index:end]]
+        rows = [self._get_row_values(row) for row in self.data[self._index : end]]
         self._index = min(end, len(self.data))
         return rows
 
     def close(self):
         pass
 
+    def _convert_value(self, value: str, type_name: str) -> Any:
+        """
+        Converts a string value to the corresponding Python type based on the XSD type
+        """
+        if value is None:
+            return None
+
+        try:
+            type_conversions = {
+                "string": str,
+                "int": int,
+                "integer": int,
+                "short": int,
+                "byte": int,
+                "float": float,
+                "double": float,
+                "decimal": float,
+                "long": float,
+                "boolean": lambda x: x.lower() in ("true", "1", "t", "y", "yes"),
+                "date": str,
+                "dateTime": str,
+            }
+
+            converter = type_conversions.get(type_name, lambda x: x)
+            return converter(value)
+        except (ValueError, TypeError):
+            logger.warning(f"Could not convert value '{value}' to type {type_name}")
+            return value
+
+
 def connect(*args, **kwargs):
     base_url = kwargs.get("base_url", "https://localhost/geoserver/ows")
     username = kwargs.get("username")
     password = kwargs.get("password")
     return Connection(base_url=base_url, username=username, password=password)
+
 
 class FakeDbApi:
     paramstyle = "pyformat"
@@ -688,5 +798,6 @@ class FakeDbApi:
 
     class Error(Exception):
         pass
+
 
 dbapi = FakeDbApi()
