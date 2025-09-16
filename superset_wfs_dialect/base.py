@@ -780,8 +780,8 @@ class Cursor:
                 "decimal": float,
                 "long": float,
                 "boolean": lambda x: x.lower() in ("true", "1", "t", "y", "yes"),
-                "date": lambda x: datetime.strptime(x, "%Y-%m-%d").date(),
-                "dateTime": lambda x: datetime.strptime(x, "%Y-%m-%dT%H:%M:%S"),
+                "date": str,
+                "dateTime": str,
             }
 
             converter = type_conversions.get(type_name, lambda x: x)
