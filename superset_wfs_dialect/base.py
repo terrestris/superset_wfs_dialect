@@ -305,13 +305,9 @@ class Cursor:
                 agg_alias = agg_info.get("alias", None)
 
                 aggregation_functions = {
-                    sqlglot.exp.Avg: lambda: sum(
-                        float(f.get(agg_prop, 0)) for f in features
-                    )
+                    sqlglot.exp.Avg: lambda: sum(f.get(agg_prop, 0) for f in features)
                     / len(features),
-                    sqlglot.exp.Sum: lambda: sum(
-                        float(f.get(agg_prop, 0)) for f in features
-                    ),
+                    sqlglot.exp.Sum: lambda: sum(f.get(agg_prop, 0) for f in features),
                     sqlglot.exp.Count: lambda: len(features),
                     "count_distinct": lambda: len(
                         set(
@@ -320,12 +316,8 @@ class Cursor:
                             if f.get(agg_prop) is not None
                         )
                     ),
-                    sqlglot.exp.Max: lambda: max(
-                        float(f.get(agg_prop, 0)) for f in features
-                    ),
-                    sqlglot.exp.Min: lambda: min(
-                        float(f.get(agg_prop, 0)) for f in features
-                    ),
+                    sqlglot.exp.Max: lambda: max(f.get(agg_prop, 0) for f in features),
+                    sqlglot.exp.Min: lambda: min(f.get(agg_prop, 0) for f in features),
                 }
 
                 if agg_class not in aggregation_functions:
