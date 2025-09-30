@@ -770,7 +770,7 @@ class Cursor:
                 "float": float,
                 "double": float,
                 "decimal": float,
-                "long": float,
+                "long": int,
                 "boolean": lambda x: x.lower() in ("true", "1", "t", "y", "yes"),
                 "date": str,
                 "dateTime": str,
