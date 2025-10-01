@@ -235,7 +235,7 @@ class TestApplyOrder(unittest.TestCase):
         self.assertEqual(cursor._convert_value("123.45", "float"), 123.45)
         self.assertEqual(cursor._convert_value("123.45", "double"), 123.45)
         self.assertEqual(cursor._convert_value("123.45", "decimal"), 123.45)
-        self.assertEqual(cursor._convert_value("123.45", "long"), 123.45)
+        self.assertEqual(cursor._convert_value("3000000000", "long"), 3_000_000_000)
         self.assertEqual(cursor._convert_value("true", "boolean"), True)
         self.assertEqual(cursor._convert_value("false", "boolean"), False)
         self.assertEqual(cursor._convert_value("1", "boolean"), True)
