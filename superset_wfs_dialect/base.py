@@ -267,15 +267,23 @@ class Cursor:
                 break
 
             # Convert values based on type information
-            for feature in features:
-                for prop, value in feature.items():
-                    if prop in type_info:
-                        feature[prop] = self._convert_value(value, type_info[prop])
+            self.convert_values_for_features(features, type_info)
+            # for feature in features:
+            #     for prop, value in feature.items():
+            #         if prop in type_info:
+            #             feature[prop] = self._convert_value(value, type_info[prop])
 
             all_features.extend(features)
             startindex += len(features)
 
         return all_features
+    
+    def convert_values_for_features(self, features, type_info):
+      # Convert values based on type information
+      for feature in features:
+          for prop, value in feature.items():
+              if prop in type_info:
+                  feature[prop] = self._convert_value(value, type_info[prop])
 
     def _aggregate_features(self, all_features, aggregation_info):
         # If no aggregation is requested, return all features
@@ -486,6 +494,29 @@ class Cursor:
             params["propertyname"] = propertyname
 
         response: BytesIO = wfs.getfeature(**params)
+        xml_text = self._parse_response(response)
+        return self._parse_features(typename, xml_text)
+        # gmlparser = GMLParser(
+        #     geometry_column=self.connection.wfs.get_schema(typename).get(
+        #         "geometry_column"
+        #     ),
+        #     srs_name=str(self.connection.wfs.contents[typename].crsOptions[0]),
+        # )
+
+        # try:
+        #     xml_text = response.read().decode("utf-8")
+        #     return gmlparser.parse(xml_text)
+        # except ET.ParseError as e:
+        #     logger.error("Error parsing the WFS response: %s", e)
+        #     raise ValueError("Error parsing the WFS response")
+        # except OSError as e:
+        #     logger.error("Error when reading the WFS response: %s", e)
+        #     raise ValueError("Error when reading the WFS response")
+        # except Exception as e:
+        #     logger.error("Error parsing the WFS response: %s", e)
+        #     raise
+
+    def _parse_features(self, typename, xml_text):
         gmlparser = GMLParser(
             geometry_column=self.connection.wfs.get_schema(typename).get(
                 "geometry_column"
@@ -494,8 +525,21 @@ class Cursor:
         )
 
         try:
-            xml_text = response.read().decode("utf-8")
+            # xml_text = response.read().decode("utf-8")
             return gmlparser.parse(xml_text)
+        except ET.ParseError as e:
+            logger.error("Error parsing the WFS response: %s", e)
+            raise ValueError("Error parsing the WFS response")
+        except OSError as e:
+            logger.error("Error when reading the WFS response: %s", e)
+            raise ValueError("Error when reading the WFS response")
+        except Exception as e:
+            logger.error("Error parsing the WFS response: %s", e)
+            raise
+    
+    def _parse_response(self, response):
+        try:
+            return response.read().decode("utf-8")
         except ET.ParseError as e:
             logger.error("Error parsing the WFS response: %s", e)
             raise ValueError("Error parsing the WFS response")
