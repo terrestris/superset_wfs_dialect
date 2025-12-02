@@ -45,6 +45,27 @@ class FeatureCollection(TypedDict):
     features: List[Feature]
 
 
+class AggregationInfo(TypedDict):
+    """
+    Information about an aggregation to be performed.
+
+    Attributes:
+    class_: Any
+        The aggregation class (e.g., sqlglot.expressions.Avg).
+    propertyname: str
+        The property name to aggregate on.
+    alias: Optional[str]
+        The alias for the aggregated value.
+    groupby: str
+        The property name to group by.
+    """
+
+    class_: Any
+    propertyname: str
+    alias: Optional[str]
+    groupby: str
+
+
 class Connection:
     def __init__(
         self, base_url="https://localhost/geoserver/ows", username=None, password=None
@@ -85,6 +106,11 @@ class Connection:
         pass
 
     def _get_output_format(self):
+        """
+        Determine the best available output format for WFS requests.
+        Prefer application/json (GeoServer) or geojson (ArcGIS Server).
+        :return: The preferred output format as a string.
+        """
         if self.wfs.operations is None:
             return
         get_feature_op = next(
@@ -100,7 +126,17 @@ class Connection:
                     return "application/json"
                 if "geojson" in fmt_lower and preferred is None:
                     preferred = "geojson"
-        # TODO: what should we do if neither is found?
+
+        if preferred is None:
+            logger.error(
+                "No suitable output format found for WFS GetFeature request for server at %s",
+                self.base_url,
+            )
+            logger.error("Output formats available: %s", output_formats)
+            raise ValueError(
+                "No suitable output format found for WFS GetFeature requests"
+            )
+
         return preferred
 
     def _cache_feature_types(self):
@@ -136,6 +172,14 @@ class Cursor:
         self.rowcount: Optional[int] = None
 
     def execute(self, operation: str, parameters: Optional[Dict] = None) -> None:
+        """
+        Executes a SQL operation (SELECT statement) against the WFS server.
+        The results are stored in the cursor's data attribute.
+
+        :param operation: The SQL operation to execute.
+        :param parameters: Optional parameters for the SQL operation.
+        :return: None
+        """
         operation = operation.strip()
 
         self.sql_logger.log_sql(operation, parameters)
@@ -193,12 +237,24 @@ class Cursor:
 
     # Parse SQL using sqlglot
     def _parse_sql(self, operation: str):
+        """
+        Parses the SQL operation using sqlglot.
+
+        :param operation: The SQL operation to parse.
+        :return: The parsed SQL AST.
+        """
         try:
             return sqlglot.parse_one(operation)
         except Exception as e:
             raise ValueError(f"Invalid SQL query: {e}")
 
     def _extract_typename(self, ast):
+        """
+        Extracts the WFS typename (layer) from the SQL AST.
+
+        :param ast: The SQL AST.
+        :return: The WFS typename.
+        """
         if not isinstance(ast, sqlglot.expressions.Select):
             raise ValueError("Only SELECT statements are supported")
 
@@ -210,6 +266,9 @@ class Cursor:
         """Extracts property names from the SQL AST.
         Returns a list of property names.
         Returns an empty list if no properties are specified.
+
+        :param ast: The SQL AST.
+        :return: A list of property names.
         """
         propertynames = []
 
@@ -236,6 +295,9 @@ class Cursor:
         """Extracts requested columns from the SQL AST.
         Returns a dictionary of { 'property_name': 'alias' }.
         Returns an empty dictionary if no columns are specified.
+
+        :param ast: The SQL AST.
+        :return: A dictionary of requested columns.
         """
         requested_columns = {}
 
@@ -256,14 +318,24 @@ class Cursor:
         return requested_columns
 
     def _extract_limit(self, ast):
-        # Get Limit
+        """
+        Extracts limit from the SQL AST.
+
+        :param ast: The SQL AST.
+        :return: The limit as an integer, or None if no limit is specified.
+        """
         limit_expr = ast.find(sqlglot.expressions.Limit)
         if limit_expr:
             return int(limit_expr.args["expression"].this)
         return None
 
     def _extract_filter(self, ast):
-        # Get Filter
+        """
+        Extracts filter from the SQL AST and converts it to WFS Filter XML.
+
+        :param ast: The SQL AST.
+        :return: The WFS Filter XML as a string.
+        """
         where_expr = ast.find(sqlglot.expressions.Where)
         if where_expr:
             filter = self._get_filter_from_expression(where_expr.this)
@@ -273,6 +345,13 @@ class Cursor:
         return None
 
     def _feature_to_row(self, feature: Feature) -> dict:
+        """
+        Converts a WFS feature to a dictionary row.
+        This is the expected return type for Superset.
+
+        :param feature: The WFS feature to convert.
+        :return: A dictionary representing the row.
+        """
         props = feature.get("properties") or {}
         row = dict(props)
         row["id"] = feature.get("id")
@@ -281,6 +360,13 @@ class Cursor:
         return row
 
     def _fetch_all_features(self, typename, filterXml) -> List[Feature]:
+        """
+        Fetches all features from the WFS server, handling pagination if necessary.
+
+        :param typename: The WFS typename (layer) to fetch features from.
+        :param filterXml: The WFS Filter XML to apply to the request.
+        :return: A list of features.
+        """
         # If we have an aggregation, we have to recursively call the WFS until all features are fetched
         # and then aggregate them in Python
         limit = 10000
@@ -325,7 +411,16 @@ class Cursor:
 
         return all_features
 
-    def _aggregate_rows(self, all_rows, aggregation_info):
+    def _aggregate_rows(
+        self, all_rows, aggregation_info: List[AggregationInfo]
+    ) -> List[dict]:
+        """
+        Aggregates rows based on the provided aggregation information.
+
+        :param all_rows: The list of all rows to aggregate.
+        :param aggregation_info: The aggregation information.
+        :return: The aggregated rows.
+        """
         # If no aggregation is requested, return all rows
         if not aggregation_info:
             return all_rows
@@ -348,7 +443,7 @@ class Cursor:
             aggregated_data.append({group_by_prperty: group_value})
 
             for agg_info in aggregation_info:
-                agg_class = agg_info["class"]
+                agg_class = agg_info["class_"]
                 agg_prop = agg_info["propertyname"]
                 agg_alias = agg_info.get("alias", None)
 
@@ -382,11 +477,26 @@ class Cursor:
         return aggregated_data
 
     def _apply_limit(self, data, row_limit):
+        """
+        Applies a row limit to the data. It modifies the data list in place.
+
+        :param data: The data to apply the limit to.
+        :param row_limit: The row limit to apply.
+        :return: None
+        """
         if row_limit is not None:
             data[:] = data[:row_limit]
 
     # ORDER BY may refer to a column or to an aggregated metric expression
-    def _apply_order(self, ast, data, aggregation_info):
+    def _apply_order(self, ast, data, aggregation_info: List[AggregationInfo]):
+        """
+        Applies ordering to the data based on the SQL AST. It modifies the data list in place.
+
+        :param ast: The SQL AST.
+        :param data: The data to apply the ordering to.
+        :param aggregation_info: The aggregation information.
+        :return: None
+        """
         order_expr = ast.args.get("order")
         if not order_expr:
             return
@@ -411,7 +521,7 @@ class Cursor:
                 agg_alias = None
                 for agg in aggregation_info:
                     if (
-                        agg["class"].__name__.upper() == metric_func
+                        agg["class_"].__name__.upper() == metric_func
                         and agg["propertyname"] == metric_col
                     ):
                         agg_alias = agg.get("alias") or metric_col
@@ -434,7 +544,12 @@ class Cursor:
 
             data.sort(key=sort_key, reverse=reverse)
 
-    def _round_up_to_nearest_power(self, n):
+    def _round_up_to_nearest_power(self, n) -> int:
+        """
+        Rounds up n to the nearest power of 1, 2, 5, or 10.
+        :param n: The number to round up.
+        :return: The rounded number.
+        """
         base = 10 ** math.floor(math.log10(n))
         if n <= base:
             return base
@@ -446,6 +561,13 @@ class Cursor:
             return 10 * base
 
     def _get_server_side_max_features(self, typename: str) -> int:
+        """
+        Gets the server-side maximum number of features for a given typename
+        from the WFS GetCapabilities response.
+
+        :param typename: The WFS typename (layer).
+        :return: The maximum number of features as an integer, or None if not found.
+        """
         base_url = self.connection.base_url
 
         # TODO: use self.connection.wfs.getcapabilities() !Does not support typename parameter!
@@ -483,6 +605,13 @@ class Cursor:
         typename: str,
         filterXml: Optional[str] = None,
     ) -> int:
+        """
+        Gets the number of features for a given typename from the WFS server.
+
+        :param typename: The WFS typename (layer).
+        :param filterXml: Optional WFS Filter XML to apply to the request.
+        :return: The number of features as an integer.
+        """
         base_url = self.connection.base_url
         # TODO: use self.connection.wfs.getfeature() !Does not support resultType!
         url = f"{base_url}?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&typename={typename}&resultType=hits"
@@ -528,6 +657,16 @@ class Cursor:
         filterXml: Optional[str] = None,
         startindex: Optional[int] = None,
     ) -> FeatureCollection:
+        """
+        Gets a FeatureCollection from the WFS server. Handles both GET and POST methods
+        depending on whether a filterXml is provided.
+
+        :param typename: The WFS typename (layer).
+        :param limit: The maximum number of features to fetch.
+        :param filterXml: Optional WFS Filter XML to apply to the request.
+        :param startindex: The starting index for pagination.
+        :return: The FeatureCollection as a dictionary.
+        """
         wfs = self.connection.wfs
 
         propertyname = (
@@ -560,7 +699,13 @@ class Cursor:
 
     def _get_aggregationinfo(
         self, ast: sqlglot.expressions.Select
-    ) -> List[Dict[str, Any]]:
+    ) -> List[AggregationInfo]:
+        """
+        Extracts aggregation information from the SQL AST.
+
+        :param ast: The SQL AST.
+        :return: A list of AggregationInfo dictionaries.
+        """
         aggregation_classes = [
             sqlglot.expressions.Avg,
             sqlglot.expressions.Sum,
@@ -612,7 +757,7 @@ class Cursor:
 
                 aggregation_info.append(
                     {
-                        "class": aggregation_class,
+                        "class_": aggregation_class,
                         "propertyname": aggregation_property,
                         "alias": aggregation_alias,
                         "groupby": groupby_property,
@@ -720,34 +865,34 @@ class Cursor:
                 propertyname=propertyname, literal=literal
             )
         # Handle in
-        # TODO: replace WKT logic with GeoJSON logic
-        # elif isinstance(expression, sqlglot.expressions.In):
-        #     propertyname = expression.this.name
-        #     literals = [lit.name for lit in expression.args["expressions"]]
+        elif isinstance(expression, sqlglot.expressions.In):
+            propertyname = expression.this.name
+            literals = [lit.name for lit in expression.args["expressions"]]
 
-        #     wktparser = WKTParser()
+            # TODO: replace WKT logic with GeoJSON logic
+            # if all(lit.startswith("SRID=") for lit in literals):
+            #     wktparser = WKTParser()
+            #     subfilters = [wktparser.parse(propertyname, wkt) for wkt in literals]
+            #     if not subfilters:
+            #         raise ValueError("No valid WKT geometries provided in filter")
+            #     elif len(subfilters) == 1:
+            #         filter = subfilters[0]
+            #     else:
+            #         filter = Or(subfilters)
+            # else:
+            if len(literals) == 1:
+                filter = PropertyIsEqualTo(
+                    propertyname=propertyname, literal=literals[0]
+                )
+            else:
+                # Combine multiple IN conditions with OR
+                subfilters = [
+                    PropertyIsEqualTo(propertyname=propertyname, literal=lit)
+                    for lit in literals
+                ]
+                filter = Or(subfilters)
 
-        #     if all(lit.startswith("SRID=") for lit in literals):
-        #         subfilters = [wktparser.parse(propertyname, wkt) for wkt in literals]
-        #         if not subfilters:
-        #             raise ValueError("No valid WKT geometries provided in filter")
-        #         elif len(subfilters) == 1:
-        #             filter = subfilters[0]
-        #         else:
-        #             filter = Or(subfilters)
-        #     else:
-        #         if len(literals) == 1:
-        #             filter = PropertyIsEqualTo(
-        #                 propertyname=propertyname, literal=literals[0]
-        #             )
-        #         else:
-        #             # Combine multiple IN conditions with OR
-        #             subfilters = [
-        #                 PropertyIsEqualTo(propertyname=propertyname, literal=lit)
-        #                 for lit in literals
-        #             ]
-        #             filter = Or(subfilters)
-        # logger.debug("######## Filter: %s", filter)
+        logger.debug("######## Filter: %s", filter)
 
         if not filter:
             raise ValueError("Unsupported filter expression")
@@ -755,7 +900,11 @@ class Cursor:
         return Filter(filter) if is_root else filter
 
     def _generate_description(self):
-        """Generates the column description in the correct order."""
+        """
+        Generates the column description in the correct order.
+
+        :return: The column description as a list of tuples.
+        """
         description = []
 
         if not self.data:
@@ -779,11 +928,21 @@ class Cursor:
 
     # TODO: Implement a proper method to get the column type from the WFS schema
     def _get_column_type(self, column_name: str) -> str:
-        """Returns the type of the column."""
+        """
+        Returns the type of the column.
+
+        :param column_name: The name of the column.
+        :return: The type of the column as a string.
+        """
         return "string"
 
     def _get_row_values(self, row: Any) -> tuple:
-        """Returns the values in the correct order."""
+        """
+        Returns the values in the correct order.
+
+        :param row: The row to get the values from.
+        :return: The row values as a tuple.
+        """
         # If row is already a tuple (DISTINCT-Block), just return it
         if isinstance(row, tuple):
             return row
@@ -795,9 +954,19 @@ class Cursor:
             return tuple(row.get(col) for col in self.requested_columns.values())
 
     def fetchall(self):
+        """
+        Fetches all rows from the cursor's data.
+
+        :return: A list of all rows.
+        """
         return [self._get_row_values(row) for row in self.data]
 
     def fetchone(self):
+        """
+        Fetches the next row from the cursor's data.
+
+        :return: The next row as a tuple, or None if no more rows are available.
+        """
         if self._index >= len(self.data):
             return None
         row = self._get_row_values(self.data[self._index])
@@ -805,6 +974,12 @@ class Cursor:
         return row
 
     def fetchmany(self, size=1):
+        """
+        Fetches the next set of rows from the cursor's data.
+
+        :param size: The number of rows to fetch.
+        :return: A list of rows.
+        """
         end = self._index + size
         rows = [self._get_row_values(row) for row in self.data[self._index : end]]
         self._index = min(end, len(self.data))
@@ -812,35 +987,6 @@ class Cursor:
 
     def close(self):
         pass
-
-    # def _convert_value(self, value: str, type_name: str) -> Any:
-    #     """
-    #     Converts a string value to the corresponding Python type based on the XSD type
-    #     """
-    #     if value is None:
-    #         return None
-
-    #     try:
-    #         type_conversions = {
-    #             "string": str,
-    #             "int": int,
-    #             "integer": int,
-    #             "short": int,
-    #             "byte": int,
-    #             "float": float,
-    #             "double": float,
-    #             "decimal": float,
-    #             "long": float,
-    #             "boolean": lambda x: x.lower() in ("true", "1", "t", "y", "yes"),
-    #             "date": str,
-    #             "dateTime": str,
-    #         }
-
-    #         converter = type_conversions.get(type_name, lambda x: x)
-    #         return converter(value)
-    #     except (ValueError, TypeError):
-    #         logger.warning(f"Could not convert value '{value}' to type {type_name}")
-    #         return value
 
 
 def connect(*args, **kwargs):

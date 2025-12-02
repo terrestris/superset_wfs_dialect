@@ -6,7 +6,7 @@ import sqlglot.expressions
 
 
 class TestConnection(unittest.TestCase):
-    @patch("superset_wfs_dialect.base.WebFeatureService")
+    @patch("superset_wfs_dialect.base.WebFeatureService_2_0_0")
     @patch("superset_wfs_dialect.base.requests.get")
     def test_connection_initialization(self, mock_requests, mock_wfs):
         mock_requests.return_value = MagicMock(status_code=200)
@@ -26,9 +26,11 @@ class TestConnection(unittest.TestCase):
             version="2.0.0",
             username="user",
             password="pass",
+            parse_remote_metadata=False,
+            timeout=30,
         )
 
-    @patch("superset_wfs_dialect.base.WebFeatureService")
+    @patch("superset_wfs_dialect.base.WebFeatureService_2_0_0")
     def test_cursor(self, mock_wfs):
         mock_wfs.return_value = MagicMock()
 
@@ -38,7 +40,7 @@ class TestConnection(unittest.TestCase):
 
 
 class TestCursor(unittest.TestCase):
-    @patch("superset_wfs_dialect.base.WebFeatureService")
+    @patch("superset_wfs_dialect.base.WebFeatureService_2_0_0")
     @patch("superset_wfs_dialect.base.requests.get")
     def test_execute_dummy_query(self, mock_requests, mock_wfs):
         mock_requests.return_value = MagicMock(status_code=200)
@@ -55,7 +57,7 @@ class TestCursor(unittest.TestCase):
         )
 
     @patch("superset_wfs_dialect.base.sqlglot.parse_one")
-    @patch("superset_wfs_dialect.base.WebFeatureService")
+    @patch("superset_wfs_dialect.base.WebFeatureService_2_0_0")
     @patch("superset_wfs_dialect.base.requests.get")
     def test_execute_invalid_query(self, mock_requests, mock_wfs, mock_parse_one):
         mock_requests.return_value = MagicMock(status_code=200)
@@ -223,31 +225,6 @@ class TestApplyOrder(unittest.TestCase):
         ]
 
         self.assertEqual(result, expected)
-
-    # def test_convert_value(self):
-    #     cursor = Cursor(MagicMock())
-
-    #     self.assertEqual(cursor._convert_value("123", "string"), "123")
-    #     self.assertEqual(cursor._convert_value("some text", "string"), "some text")
-    #     self.assertEqual(cursor._convert_value("123", "integer"), 123)
-    #     self.assertEqual(cursor._convert_value("123", "int"), 123)
-    #     self.assertEqual(cursor._convert_value("123", "short"), 123)
-    #     self.assertEqual(cursor._convert_value("123", "byte"), 123)
-    #     self.assertEqual(cursor._convert_value("123.45", "float"), 123.45)
-    #     self.assertEqual(cursor._convert_value("123.45", "double"), 123.45)
-    #     self.assertEqual(cursor._convert_value("123.45", "decimal"), 123.45)
-    #     self.assertEqual(cursor._convert_value("123.45", "long"), 123.45)
-    #     self.assertEqual(cursor._convert_value("true", "boolean"), True)
-    #     self.assertEqual(cursor._convert_value("false", "boolean"), False)
-    #     self.assertEqual(cursor._convert_value("1", "boolean"), True)
-    #     self.assertEqual(cursor._convert_value("0", "boolean"), False)
-    #     self.assertEqual(cursor._convert_value("yes", "boolean"), True)
-    #     self.assertEqual(cursor._convert_value("no", "boolean"), False)
-    #     self.assertEqual(cursor._convert_value("2023-10-05", "date"), "2023-10-05")
-    #     self.assertEqual(cursor._convert_value("2023", "dateTime"), "2023")
-    #     self.assertIsNone(cursor._convert_value(None, "string"))
-    #     # Test invalid integer conversion
-    #     self.assertEqual(cursor._convert_value("abc", "integer"), "abc")
 
 
 if __name__ == "__main__":

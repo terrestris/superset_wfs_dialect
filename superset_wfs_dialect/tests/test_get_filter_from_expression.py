@@ -3,26 +3,39 @@ from unittest.mock import MagicMock, patch
 from superset_wfs_dialect.base import Cursor, Connection
 import sqlglot
 from owslib.fes2 import (
-  And,
-  Filter,
-  Not,
-  Or,
-  PropertyIsEqualTo,
-  PropertyIsGreaterThan,
-  PropertyIsLessThan,
-  PropertyIsLike,
-  PropertyIsNotEqualTo,
+    And,
+    Filter,
+    Not,
+    Or,
+    PropertyIsEqualTo,
+    PropertyIsGreaterThan,
+    PropertyIsLessThan,
+    PropertyIsLike,
+    PropertyIsNotEqualTo,
 )
+
 
 class TestGetFilterFromExpression(unittest.TestCase):
     def setUp(self):
-        with patch("superset_wfs_dialect.base.WebFeatureService") as mock_wfs, \
-            patch("superset_wfs_dialect.base.requests.get") as mock_requests:
-            mock_requests.return_value = MagicMock(status_code=200)
-            mock_wfs.return_value = MagicMock()
+        self.patcher_wfs = patch("superset_wfs_dialect.base.WebFeatureService_2_0_0")
+        self.patcher_requests = patch("superset_wfs_dialect.base.requests.get")
 
-            self.connection = Connection(base_url="https://example.com/geoserver/ows", username="user", password="pass")
-            self.cursor = Cursor(self.connection)
+        mock_wfs = self.patcher_wfs.start()
+        mock_requests = self.patcher_requests.start()
+
+        mock_requests.return_value = MagicMock(status_code=200)
+        mock_wfs.return_value = MagicMock()
+
+        self.connection = Connection(
+            base_url="https://example.com/geoserver/ows",
+            username="user",
+            password="pass",
+        )
+        self.cursor = Cursor(self.connection)
+
+    def tearDown(self):
+        self.patcher_wfs.stop()
+        self.patcher_requests.stop()
 
     def test_equality_filter(self):
         expression = sqlglot.parse_one("column = 'value'")
@@ -110,6 +123,7 @@ class TestGetFilterFromExpression(unittest.TestCase):
         self.assertIsInstance(filter_result.filter.operations[0], PropertyIsEqualTo)
         self.assertEqual(filter_result.filter.operations[0].propertyname, "column")
         self.assertEqual(filter_result.filter.operations[0].literal, "value")
+
 
 if __name__ == "__main__":
     unittest.main()

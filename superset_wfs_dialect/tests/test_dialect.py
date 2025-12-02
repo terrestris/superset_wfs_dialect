@@ -3,6 +3,7 @@ from unittest.mock import MagicMock
 from superset_wfs_dialect.dialect import WfsDialect
 from sqlalchemy.types import Integer, String
 
+
 class TestWfsDialect(unittest.TestCase):
     def setUp(self):
         self.dialect = WfsDialect()
@@ -57,10 +58,10 @@ class TestWfsDialect(unittest.TestCase):
         connection.connection.connection.wfs = wfs_mock
 
         expected_columns = [
-                {"name": "id", "type": Integer, "nullable": False, "default": None},
-                {"name": "name", "type": String, "nullable": True, "default": None},
-                {"name": "age", "type": Integer, "nullable": False, "default": None},
-                {"name": "geom", "type": String, "nullable": True, "default": None},
+            {"name": "id", "type": Integer, "nullable": False, "default": None},
+            {"name": "name", "type": String, "nullable": True, "default": None},
+            {"name": "age", "type": Integer, "nullable": False, "default": None},
+            {"name": "geometry", "type": String, "nullable": True, "default": None},
         ]
 
         result = self.dialect.get_columns(connection, "test_table")
@@ -69,6 +70,7 @@ class TestWfsDialect(unittest.TestCase):
             self.assertEqual(expected["nullable"], actual["nullable"])
             self.assertEqual(expected["default"], actual["default"])
             self.assertEqual(expected["type"], type(actual["type"]))
+
 
 if __name__ == "__main__":
     unittest.main()
