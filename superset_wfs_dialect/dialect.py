@@ -107,7 +107,7 @@ class WfsDialect(DefaultDialect):
 
         columns.append(
             {
-                "name": fiona_schema.get("geometry_column"),
+                "name": "geometry",
                 "type": sqltypes.String(),
                 "nullable": True,
                 "default": None,
