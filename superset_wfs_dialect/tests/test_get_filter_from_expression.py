@@ -32,7 +32,13 @@ class TestGetFilterFromExpression(unittest.TestCase):
             username="user",
             password="pass",
         )
+        # Configure feature_type_schemas for filter tests
+        mock_schema = MagicMock()
+        mock_schema.properties = {"column": "string", "id": "integer"}
+        self.connection.feature_type_schemas = {"test_layer": mock_schema}
+
         self.cursor = Cursor(self.connection)
+        self.cursor.typename = "test_layer"
 
     def tearDown(self):
         self.patcher_wfs.stop()

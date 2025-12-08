@@ -5,6 +5,7 @@ import sqlglot
 import sqlglot.expressions
 import xml.etree.ElementTree as ET
 import orjson
+
 from typing import Any, Dict, List, Optional, Tuple, TypedDict, Union
 
 from owslib.fes2 import (
@@ -19,6 +20,7 @@ from owslib.fes2 import (
     PropertyIsLessThanOrEqualTo,
     PropertyIsLike,
     PropertyIsNotEqualTo,
+    PropertyIsNull,
 )
 from owslib.feature.wfs200 import WebFeatureService_2_0_0
 
@@ -28,7 +30,7 @@ from .sql_logger import SQLLogger
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-GEOMETRY_NAME = "geom"
+GEOMETRY_COLUMN_NAME = "geom"
 
 
 class Geometry(TypedDict):
@@ -75,7 +77,7 @@ class Connection:
         self.base_url = base_url
         self.username = username
         self.password = password
-        self.feature_type_info = {}
+        self.feature_type_schemas = {}
         self.server_info = {}
         self.wfs_output_format = None
 
@@ -93,7 +95,7 @@ class Connection:
         self.wfs_output_format = self._get_output_format()
 
         # Initial DescribeFeatureType for all available layers
-        self._cache_feature_types()
+        self._cache_feature_type_schemas()
 
     def cursor(self):
         return Cursor(self)
@@ -142,20 +144,13 @@ class Connection:
 
         return preferred
 
-    def _cache_feature_types(self):
+    def _cache_feature_type_schemas(self):
         """
-        Get schema of every feature type and store the property types in a dictionary.
-        This is used to convert the property values to the correct type when fetching features.
+        Get schema of every feature type and store in a dictionary.
         """
         for feature_type in self.wfs.contents:
             schema = self.wfs.get_schema(typename=feature_type)
-            property_types = {}
-            if schema and "properties" in schema:
-                for property_name, property_type in schema.get(
-                    "properties", {}
-                ).items():
-                    property_types[property_name] = property_type
-            self.feature_type_info[feature_type] = property_types
+            self.feature_type_schemas[feature_type] = schema
 
 
 class Cursor:
@@ -359,7 +354,7 @@ class Cursor:
         row = dict(props)
         row["id"] = feature.get("id")
         geom = feature.get("geometry")
-        row[GEOMETRY_NAME] = orjson.dumps(geom).decode() if geom else None
+        row[GEOMETRY_COLUMN_NAME] = orjson.dumps(geom).decode() if geom else None
         return row
 
     def _fetch_all_features(self, typename, filterXml) -> List[Feature]:
@@ -680,7 +675,8 @@ class Cursor:
         if fiona_schema is not None and propertyname is not None:
             geometry_column = fiona_schema.get("geometry_column")
             propertyname = [
-                geometry_column if x == GEOMETRY_NAME else x for x in propertyname
+                geometry_column if x == GEOMETRY_COLUMN_NAME else x
+                for x in propertyname
             ]
 
         params = {
@@ -789,6 +785,7 @@ class Cursor:
             sqlglot.expressions.Not,
             sqlglot.expressions.Paren,
             sqlglot.expressions.Like,
+            sqlglot.expressions.Is,
         ]
 
         if not isinstance(expression, tuple(supported_expressions)):
@@ -796,14 +793,25 @@ class Cursor:
                 "Unsupported filter expression:", expression.__class__.__name__
             )
 
-        filter = None
-        geometry_column = self.connection.feature_type_info.get(self.typename, {})
+        featuretype_schema = self.connection.feature_type_schemas.get(self.typename)
+        if not featuretype_schema:
+            raise ValueError(
+                "Could not retrieve feature type schema for typename:", self.typename
+            )
+
+        featuretype_geometry_name = featuretype_schema.get("geometry_column")
+        if not featuretype_geometry_name:
+            raise ValueError(
+                "Could not determine geometry column for typename:", self.typename
+            )
+
         propertyname = (
-            geometry_column
-            if expression.this.name == GEOMETRY_NAME
+            featuretype_geometry_name
+            if expression.this.name == GEOMETRY_COLUMN_NAME
             else expression.this.name
         )
 
+        filter = None
         # Handle parentheses
         if isinstance(expression, sqlglot.expressions.Paren):
             inner_expression = expression.this
@@ -867,18 +875,6 @@ class Cursor:
         # Handle in
         elif isinstance(expression, sqlglot.expressions.In):
             literals = [lit.name for lit in expression.args["expressions"]]
-
-            # TODO: replace WKT logic with GeoJSON logic
-            # if all(lit.startswith("SRID=") for lit in literals):
-            #     wktparser = WKTParser()
-            #     subfilters = [wktparser.parse(propertyname, wkt) for wkt in literals]
-            #     if not subfilters:
-            #         raise ValueError("No valid WKT geometries provided in filter")
-            #     elif len(subfilters) == 1:
-            #         filter = subfilters[0]
-            #     else:
-            #         filter = Or(subfilters)
-            # else:
             if len(literals) == 1:
                 filter = PropertyIsEqualTo(
                     propertyname=propertyname, literal=literals[0]
@@ -890,6 +886,13 @@ class Cursor:
                     for lit in literals
                 ]
                 filter = Or(subfilters)
+        # Handle IS NULL
+        elif isinstance(expression, sqlglot.expressions.Is):
+            check_expr = expression.args["expression"]
+            if isinstance(check_expr, sqlglot.expressions.Null):
+                filter = PropertyIsNull(propertyname=propertyname)
+            else:
+                raise ValueError("Unsupported IS expression")
 
         logger.debug("######## Filter: %s", filter)
 
