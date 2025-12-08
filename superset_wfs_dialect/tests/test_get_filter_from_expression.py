@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import MagicMock, patch
 from superset_wfs_dialect.base import Cursor, Connection
+from .conftest import create_mock_wfs_instance
 import sqlglot
 from owslib.fes2 import (
     And,
@@ -24,7 +25,7 @@ class TestGetFilterFromExpression(unittest.TestCase):
         mock_requests = self.patcher_requests.start()
 
         mock_requests.return_value = MagicMock(status_code=200)
-        mock_wfs.return_value = MagicMock()
+        mock_wfs.return_value = create_mock_wfs_instance()
 
         self.connection = Connection(
             base_url="https://example.com/geoserver/ows",

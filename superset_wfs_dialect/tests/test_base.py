@@ -1,8 +1,11 @@
 import unittest
 from unittest.mock import patch, MagicMock
-from superset_wfs_dialect.base import Connection, Cursor
+from superset_wfs_dialect.base import Connection, Cursor, AggregationInfo
+from .conftest import create_mock_wfs_instance
 import sqlglot
 import sqlglot.expressions
+
+from typing import List
 
 
 class TestConnection(unittest.TestCase):
@@ -10,7 +13,7 @@ class TestConnection(unittest.TestCase):
     @patch("superset_wfs_dialect.base.requests.get")
     def test_connection_initialization(self, mock_requests, mock_wfs):
         mock_requests.return_value = MagicMock(status_code=200)
-        mock_wfs.return_value = MagicMock()
+        mock_wfs.return_value = create_mock_wfs_instance()
 
         conn = Connection(
             base_url="https://example.com/geoserver/ows",
@@ -32,7 +35,7 @@ class TestConnection(unittest.TestCase):
 
     @patch("superset_wfs_dialect.base.WebFeatureService_2_0_0")
     def test_cursor(self, mock_wfs):
-        mock_wfs.return_value = MagicMock()
+        mock_wfs.return_value = create_mock_wfs_instance()
 
         conn = Connection()
         cursor = conn.cursor()
@@ -44,7 +47,7 @@ class TestCursor(unittest.TestCase):
     @patch("superset_wfs_dialect.base.requests.get")
     def test_execute_dummy_query(self, mock_requests, mock_wfs):
         mock_requests.return_value = MagicMock(status_code=200)
-        mock_wfs.return_value = MagicMock()
+        mock_wfs.return_value = create_mock_wfs_instance()
 
         conn = Connection()
         cursor = conn.cursor()
@@ -61,8 +64,7 @@ class TestCursor(unittest.TestCase):
     @patch("superset_wfs_dialect.base.requests.get")
     def test_execute_invalid_query(self, mock_requests, mock_wfs, mock_parse_one):
         mock_requests.return_value = MagicMock(status_code=200)
-        mock_wfs.return_value = MagicMock()
-
+        mock_wfs.return_value = create_mock_wfs_instance()
         mock_parse_one.side_effect = ValueError("Invalid SQL query")
 
         conn = Connection()
@@ -140,11 +142,12 @@ class TestApplyOrder(unittest.TestCase):
 
         ast = MagicMock()
         ast.args = {"order": DummyOrderExpr()}
-        aggregation_info = [
+        aggregation_info: List[AggregationInfo] = [
             {
-                "class": MagicMock(__name__="Avg"),
+                "class_": MagicMock(__name__="Avg"),
                 "propertyname": "baumhoehe",
                 "alias": "AVG(baumhoehe)",
+                "groupby": "gattung",
             }
         ]
         self.cursor._apply_order(ast, data, aggregation_info=aggregation_info)
@@ -182,9 +185,9 @@ class TestApplyOrder(unittest.TestCase):
             {"group": "B", "type": "x"},
         ]
 
-        aggregation_info = [
+        aggregation_info: List[AggregationInfo] = [
             {
-                "class": sqlglot.expressions.Count,
+                "class_": sqlglot.expressions.Count,
                 "propertyname": "type",
                 "alias": "COUNT(type)",
                 "groupby": "group",
@@ -208,9 +211,9 @@ class TestApplyOrder(unittest.TestCase):
             {"group": "B", "type": "x"},
         ]
 
-        aggregation_info = [
+        aggregation_info: List[AggregationInfo] = [
             {
-                "class": "count_distinct",
+                "class_": "count_distinct",
                 "propertyname": "type",
                 "alias": "COUNT_DISTINCT(type)",
                 "groupby": "group",

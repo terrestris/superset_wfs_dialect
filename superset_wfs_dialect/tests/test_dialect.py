@@ -61,7 +61,7 @@ class TestWfsDialect(unittest.TestCase):
             {"name": "id", "type": Integer, "nullable": False, "default": None},
             {"name": "name", "type": String, "nullable": True, "default": None},
             {"name": "age", "type": Integer, "nullable": False, "default": None},
-            {"name": "geometry", "type": String, "nullable": True, "default": None},
+            {"name": "geom", "type": String, "nullable": True, "default": None},
         ]
 
         result = self.dialect.get_columns(connection, "test_table")

@@ -107,7 +107,7 @@ class WfsDialect(DefaultDialect):
 
         columns.append(
             {
-                "name": "geometry",
+                "name": GEOMETRY_NAME,
                 "type": sqltypes.String(),
                 "nullable": True,
                 "default": None,

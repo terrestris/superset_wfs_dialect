@@ -28,6 +28,8 @@ from .sql_logger import SQLLogger
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
+GEOMETRY_NAME = "geom"
+
 
 class Geometry(TypedDict):
     type: str
@@ -118,6 +120,7 @@ class Connection:
         )
 
         preferred = None
+        output_formats = []
         if get_feature_op:
             output_formats = get_feature_op.parameters["outputFormat"]["values"]
             for fmt in output_formats:
@@ -356,7 +359,7 @@ class Cursor:
         row = dict(props)
         row["id"] = feature.get("id")
         geom = feature.get("geometry")
-        row["geometry"] = orjson.dumps(geom).decode() if geom else None
+        row[GEOMETRY_NAME] = orjson.dumps(geom).decode() if geom else None
         return row
 
     def _fetch_all_features(self, typename, filterXml) -> List[Feature]:
@@ -677,7 +680,7 @@ class Cursor:
         if fiona_schema is not None and propertyname is not None:
             geometry_column = fiona_schema.get("geometry_column")
             propertyname = [
-                geometry_column if x == "geometry" else x for x in propertyname
+                geometry_column if x == GEOMETRY_NAME else x for x in propertyname
             ]
 
         params = {
@@ -794,6 +797,13 @@ class Cursor:
             )
 
         filter = None
+        geometry_column = self.connection.feature_type_info.get(self.typename, {})
+        propertyname = (
+            geometry_column
+            if expression.this.name == GEOMETRY_NAME
+            else expression.this.name
+        )
+
         # Handle parentheses
         if isinstance(expression, sqlglot.expressions.Paren):
             inner_expression = expression.this
@@ -818,12 +828,10 @@ class Cursor:
             filter = Not([innerFilter])
         # Handle equality
         elif isinstance(expression, sqlglot.expressions.EQ):
-            propertyname = expression.this.name
             literal = expression.args["expression"].name
             filter = PropertyIsEqualTo(propertyname=propertyname, literal=literal)
         # Handle inequality
         elif isinstance(expression, sqlglot.expressions.NEQ):
-            propertyname = expression.this.name
             literal = expression.args["expression"].name
             filter = PropertyIsNotEqualTo(propertyname=propertyname, literal=literal)
         # Handle LIKE
@@ -831,42 +839,33 @@ class Cursor:
             matchcase = False
             if isinstance(expression.this, sqlglot.expressions.Lower):
                 # If the expression is a LOWER function, we need to extract the property name
-                propertyname = expression.this.this.name
                 matchcase = False
-            else:
-                # Otherwise, it is a simple column reference
-                propertyname = expression.this.name
             literal = expression.args["expression"].name
             filter = PropertyIsLike(
                 propertyname=propertyname, literal=literal, matchCase=matchcase
             )
         # Handle greater than
         elif isinstance(expression, sqlglot.expressions.GT):
-            propertyname = expression.this.name
             literal = expression.args["expression"].name
             filter = PropertyIsGreaterThan(propertyname=propertyname, literal=literal)
         # Handle greater than or equal
         elif isinstance(expression, sqlglot.expressions.GTE):
-            propertyname = expression.this.name
             literal = expression.args["expression"].name
             filter = PropertyIsGreaterThanOrEqualTo(
                 propertyname=propertyname, literal=literal
             )
         # Handle less than
         elif isinstance(expression, sqlglot.expressions.LT):
-            propertyname = expression.this.name
             literal = expression.args["expression"].name
             filter = PropertyIsLessThan(propertyname=propertyname, literal=literal)
         # Handle less than or equal
         elif isinstance(expression, sqlglot.expressions.LTE):
-            propertyname = expression.this.name
             literal = expression.args["expression"].name
             filter = PropertyIsLessThanOrEqualTo(
                 propertyname=propertyname, literal=literal
             )
         # Handle in
         elif isinstance(expression, sqlglot.expressions.In):
-            propertyname = expression.this.name
             literals = [lit.name for lit in expression.args["expressions"]]
 
             # TODO: replace WKT logic with GeoJSON logic
