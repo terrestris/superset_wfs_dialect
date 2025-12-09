@@ -808,11 +808,12 @@ class Cursor:
                 "Could not determine geometry column for typename:", self.typename
             )
 
-        propertyname = (
-            featuretype_geometry_name
-            if expression.this.name == GEOMETRY_COLUMN_NAME
-            else expression.this.name
-        )
+        propertyname = expression.this.name
+
+        if propertyname == GEOMETRY_COLUMN_NAME:
+            raise ValueError("Geometry filters are not supported")
+            # TODO: when reenabling geometry filters, make sure to set
+            # propertyname = featuretype_geometry_name
 
         filter = None
         # Handle parentheses
