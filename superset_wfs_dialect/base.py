@@ -423,22 +423,25 @@ class Cursor:
         if not aggregation_info:
             return all_rows
 
-        group_by_prperty = aggregation_info[0]["groupby"]
+        group_by_property = aggregation_info[0]["groupby"]
 
         # check if all aggregations are for the same property, if not raise an error
-        if not all(agg["groupby"] == group_by_prperty for agg in aggregation_info):
+        if not all(agg["groupby"] == group_by_property for agg in aggregation_info):
             raise ValueError("All aggregations must be for the same property")
         grouped_data = {}
 
         for row in all_rows:
-            group_value = row.get(group_by_prperty)
+            group_value = row.get(group_by_property)
             if group_value not in grouped_data:
                 grouped_data[group_value] = []
             grouped_data[group_value].append(row)
         aggregated_data = []
 
         for group_value, rows in grouped_data.items():
-            aggregated_data.append({group_by_prperty: group_value})
+            # Copy properties from the first row of the group, but keep the group value
+            aggregated_row = dict(rows[0]) if rows else {}
+            aggregated_row[group_by_property] = group_value
+            aggregated_data.append(aggregated_row)
 
             for agg_info in aggregation_info:
                 agg_class = agg_info["class_"]
