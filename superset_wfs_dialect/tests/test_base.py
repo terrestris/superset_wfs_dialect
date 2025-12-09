@@ -196,7 +196,10 @@ class TestApplyOrder(unittest.TestCase):
 
         result = cursor._aggregate_rows(all_features, aggregation_info)
 
-        expected = [{"group": "A", "COUNT(type)": 3}, {"group": "B", "COUNT(type)": 1}]
+        expected = [
+            {"group": "A", "type": "x", "COUNT(type)": 3},
+            {"group": "B", "type": "x", "COUNT(type)": 1},
+        ]
 
         self.assertEqual(result, expected)
 
@@ -223,8 +226,8 @@ class TestApplyOrder(unittest.TestCase):
         result = cursor._aggregate_rows(all_features, aggregation_info)
 
         expected = [
-            {"group": "A", "COUNT_DISTINCT(type)": 2},
-            {"group": "B", "COUNT_DISTINCT(type)": 1},
+            {"group": "A", "type": "x", "COUNT_DISTINCT(type)": 2},
+            {"group": "B", "type": "x", "COUNT_DISTINCT(type)": 1},
         ]
 
         self.assertEqual(result, expected)

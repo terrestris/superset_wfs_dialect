@@ -848,12 +848,14 @@ class Cursor:
         # Handle LIKE
         elif isinstance(expression, sqlglot.expressions.Like):
             matchcase = False
+            like_propertyname = propertyname
             if isinstance(expression.this, sqlglot.expressions.Lower):
                 # If the expression is a LOWER function, we need to extract the property name
                 matchcase = False
+                like_propertyname = expression.this.this.name
             literal = expression.args["expression"].name
             filter = PropertyIsLike(
-                propertyname=propertyname, literal=literal, matchCase=matchcase
+                propertyname=like_propertyname, literal=literal, matchCase=matchcase
             )
         # Handle greater than
         elif isinstance(expression, sqlglot.expressions.GT):
