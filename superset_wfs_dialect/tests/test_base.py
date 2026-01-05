@@ -1,15 +1,19 @@
 import unittest
 from unittest.mock import patch, MagicMock
-from superset_wfs_dialect.base import Connection, Cursor
+from superset_wfs_dialect.base import Connection, Cursor, AggregationInfo
+from .conftest import create_mock_wfs_instance
 import sqlglot
+import sqlglot.expressions
+
+from typing import List
 
 
 class TestConnection(unittest.TestCase):
-    @patch("superset_wfs_dialect.base.WebFeatureService")
+    @patch("superset_wfs_dialect.base.WebFeatureService_2_0_0")
     @patch("superset_wfs_dialect.base.requests.get")
     def test_connection_initialization(self, mock_requests, mock_wfs):
         mock_requests.return_value = MagicMock(status_code=200)
-        mock_wfs.return_value = MagicMock()
+        mock_wfs.return_value = create_mock_wfs_instance()
 
         conn = Connection(
             base_url="https://example.com/geoserver/ows",
@@ -25,11 +29,13 @@ class TestConnection(unittest.TestCase):
             version="2.0.0",
             username="user",
             password="pass",
+            parse_remote_metadata=False,
+            timeout=30,
         )
 
-    @patch("superset_wfs_dialect.base.WebFeatureService")
+    @patch("superset_wfs_dialect.base.WebFeatureService_2_0_0")
     def test_cursor(self, mock_wfs):
-        mock_wfs.return_value = MagicMock()
+        mock_wfs.return_value = create_mock_wfs_instance()
 
         conn = Connection()
         cursor = conn.cursor()
@@ -37,11 +43,11 @@ class TestConnection(unittest.TestCase):
 
 
 class TestCursor(unittest.TestCase):
-    @patch("superset_wfs_dialect.base.WebFeatureService")
+    @patch("superset_wfs_dialect.base.WebFeatureService_2_0_0")
     @patch("superset_wfs_dialect.base.requests.get")
     def test_execute_dummy_query(self, mock_requests, mock_wfs):
         mock_requests.return_value = MagicMock(status_code=200)
-        mock_wfs.return_value = MagicMock()
+        mock_wfs.return_value = create_mock_wfs_instance()
 
         conn = Connection()
         cursor = conn.cursor()
@@ -54,12 +60,11 @@ class TestCursor(unittest.TestCase):
         )
 
     @patch("superset_wfs_dialect.base.sqlglot.parse_one")
-    @patch("superset_wfs_dialect.base.WebFeatureService")
+    @patch("superset_wfs_dialect.base.WebFeatureService_2_0_0")
     @patch("superset_wfs_dialect.base.requests.get")
     def test_execute_invalid_query(self, mock_requests, mock_wfs, mock_parse_one):
         mock_requests.return_value = MagicMock(status_code=200)
-        mock_wfs.return_value = MagicMock()
-
+        mock_wfs.return_value = create_mock_wfs_instance()
         mock_parse_one.side_effect = ValueError("Invalid SQL query")
 
         conn = Connection()
@@ -137,11 +142,12 @@ class TestApplyOrder(unittest.TestCase):
 
         ast = MagicMock()
         ast.args = {"order": DummyOrderExpr()}
-        aggregation_info = [
+        aggregation_info: List[AggregationInfo] = [
             {
-                "class": MagicMock(__name__="Avg"),
+                "class_": MagicMock(__name__="Avg"),
                 "propertyname": "baumhoehe",
                 "alias": "AVG(baumhoehe)",
+                "groupby": "gattung",
             }
         ]
         self.cursor._apply_order(ast, data, aggregation_info=aggregation_info)
@@ -179,18 +185,21 @@ class TestApplyOrder(unittest.TestCase):
             {"group": "B", "type": "x"},
         ]
 
-        aggregation_info = [
+        aggregation_info: List[AggregationInfo] = [
             {
-                "class": sqlglot.exp.Count,
+                "class_": sqlglot.expressions.Count,
                 "propertyname": "type",
                 "alias": "COUNT(type)",
                 "groupby": "group",
             }
         ]
 
-        result = cursor._aggregate_features(all_features, aggregation_info)
+        result = cursor._aggregate_rows(all_features, aggregation_info)
 
-        expected = [{"group": "A", "COUNT(type)": 3}, {"group": "B", "COUNT(type)": 1}]
+        expected = [
+            {"group": "A", "type": "x", "COUNT(type)": 3},
+            {"group": "B", "type": "x", "COUNT(type)": 1},
+        ]
 
         self.assertEqual(result, expected)
 
@@ -205,48 +214,23 @@ class TestApplyOrder(unittest.TestCase):
             {"group": "B", "type": "x"},
         ]
 
-        aggregation_info = [
+        aggregation_info: List[AggregationInfo] = [
             {
-                "class": "count_distinct",
+                "class_": "count_distinct",
                 "propertyname": "type",
                 "alias": "COUNT_DISTINCT(type)",
                 "groupby": "group",
             }
         ]
 
-        result = cursor._aggregate_features(all_features, aggregation_info)
+        result = cursor._aggregate_rows(all_features, aggregation_info)
 
         expected = [
-            {"group": "A", "COUNT_DISTINCT(type)": 2},
-            {"group": "B", "COUNT_DISTINCT(type)": 1},
+            {"group": "A", "type": "x", "COUNT_DISTINCT(type)": 2},
+            {"group": "B", "type": "x", "COUNT_DISTINCT(type)": 1},
         ]
 
         self.assertEqual(result, expected)
-
-    def test_convert_value(self):
-        cursor = Cursor(MagicMock())
-
-        self.assertEqual(cursor._convert_value("123", "string"), "123")
-        self.assertEqual(cursor._convert_value("some text", "string"), "some text")
-        self.assertEqual(cursor._convert_value("123", "integer"), 123)
-        self.assertEqual(cursor._convert_value("123", "int"), 123)
-        self.assertEqual(cursor._convert_value("123", "short"), 123)
-        self.assertEqual(cursor._convert_value("123", "byte"), 123)
-        self.assertEqual(cursor._convert_value("123.45", "float"), 123.45)
-        self.assertEqual(cursor._convert_value("123.45", "double"), 123.45)
-        self.assertEqual(cursor._convert_value("123.45", "decimal"), 123.45)
-        self.assertEqual(cursor._convert_value("123.45", "long"), 123.45)
-        self.assertEqual(cursor._convert_value("true", "boolean"), True)
-        self.assertEqual(cursor._convert_value("false", "boolean"), False)
-        self.assertEqual(cursor._convert_value("1", "boolean"), True)
-        self.assertEqual(cursor._convert_value("0", "boolean"), False)
-        self.assertEqual(cursor._convert_value("yes", "boolean"), True)
-        self.assertEqual(cursor._convert_value("no", "boolean"), False)
-        self.assertEqual(cursor._convert_value("2023-10-05", "date"), "2023-10-05")
-        self.assertEqual(cursor._convert_value("2023", "dateTime"), "2023")
-        self.assertIsNone(cursor._convert_value(None, "string"))
-        # Test invalid integer conversion
-        self.assertEqual(cursor._convert_value("abc", "integer"), "abc")
 
 
 if __name__ == "__main__":

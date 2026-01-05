@@ -1,7 +1,7 @@
 from sqlalchemy.engine.default import DefaultDialect
 from sqlalchemy import types as sqltypes
 from sqlalchemy.dialects import registry
-from .base import FakeDbApi
+from .base import FakeDbApi, GEOMETRY_COLUMN_NAME
 import superset_wfs_dialect
 import logging
 
@@ -107,7 +107,7 @@ class WfsDialect(DefaultDialect):
 
         columns.append(
             {
-                "name": fiona_schema.get("geometry_column"),
+                "name": GEOMETRY_COLUMN_NAME,
                 "type": sqltypes.String(),
                 "nullable": True,
                 "default": None,
