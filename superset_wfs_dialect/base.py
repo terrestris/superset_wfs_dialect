@@ -5,6 +5,7 @@ import sqlglot
 import sqlglot.expressions
 import xml.etree.ElementTree as ET
 import orjson
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from typing import Any, Dict, List, Optional, Tuple, TypedDict, Union
 
@@ -72,7 +73,11 @@ class AggregationInfo(TypedDict):
 
 class Connection:
     def __init__(
-        self, base_url="https://localhost/geoserver/ows", username=None, password=None
+        self,
+        base_url="https://localhost/geoserver/ows",
+        username=None,
+        password=None,
+        max_workers=5,
     ):
         self.base_url = base_url
         self.username = username
@@ -80,6 +85,7 @@ class Connection:
         self.feature_type_schemas = {}
         self.server_info = {}
         self.wfs_output_format = None
+        self.max_workers = max_workers
 
         wfs_args = {"url": base_url, "version": "2.0.0"}
 
@@ -360,6 +366,7 @@ class Cursor:
     def _fetch_all_features(self, typename, filterXml) -> List[Feature]:
         """
         Fetches all features from the WFS server, handling pagination if necessary.
+        Uses parallel requests to improve performance.
 
         :param typename: The WFS typename (layer) to fetch features from.
         :param filterXml: The WFS Filter XML to apply to the request.
@@ -372,41 +379,101 @@ class Cursor:
         # fetch as many features as possible with one request
         server_side_maxfeatures = self._get_server_side_max_features(typename=typename)
         logger.debug("### Server-side maximum features: %s", server_side_maxfeatures)
+
+        # Get the total number of features to calculate the number of requests needed
+        total_features = self._get_feature_count(typename=typename, filterXml=filterXml)
+        logger.debug("### Total features available: %s", total_features)
+
+        if total_features == 0:
+            return []
+
         if server_side_maxfeatures is not None:
             limit = server_side_maxfeatures
         else:
-            total_features = self._get_feature_count(typename=typename)
-            logger.debug("### Total features available: %s", total_features)
             if total_features / limit > 100:
                 # reduce requests if there are too many features to never reach 100 requests
                 limit = self._round_up_to_nearest_power(n=(total_features / 100))
 
-        startindex = 0
-        all_features = []
-        logger.debug("Fetching features for aggregation")
-        while True:
-            # Fetch features with pagination
-            logger.info(
-                "Fetching features from %s to %s", startindex, startindex + limit
-            )
+        # Calculate the number of requests needed
+        num_requests = math.ceil(total_features / limit)
+        logger.debug("### Will make %s requests with limit %s", num_requests, limit)
+
+        # If only one request is needed, fetch directly
+        if num_requests == 1:
+            logger.debug("Fetching all features in a single request")
             feature_collection = self._get_FeatureCollection(
                 typename=typename,
                 limit=limit,
                 filterXml=filterXml,
-                startindex=startindex,
+                startindex=0,
             )
-            if not feature_collection:
-                break
+            return feature_collection.get("features", []) if feature_collection else []
 
-            features = feature_collection.get("features", [])
+        # Create a helper function for fetching a single page
+        def fetch_page(start_idx):
+            logger.info("Fetching features from %s to %s", start_idx, start_idx + limit)
+            try:
+                feature_collection = self._get_FeatureCollection(
+                    typename=typename,
+                    limit=limit,
+                    filterXml=filterXml,
+                    startindex=start_idx,
+                )
+                if feature_collection:
+                    return (start_idx, feature_collection.get("features", []))
+                return (start_idx, [])
+            except Exception as e:
+                logger.error("Error fetching features at index %s: %s", start_idx, e)
+                return (start_idx, [])
 
-            if not features:
-                break
+        # Fetch all pages in parallel
+        max_workers = self.connection.max_workers
+        logger.debug("Using %s parallel workers for fetching features", max_workers)
+        logger.debug("Fetching features for aggregation")
 
-            all_features.extend(features)
-            # startindex += feature_collection.get('numberReturned')
-            startindex += len(features)
+        # Create all startindex values
+        startindexes = [i * limit for i in range(num_requests)]
 
+        # Fetch pages in parallel, limiting concurrent requests to max_workers
+        results = []
+        with ThreadPoolExecutor(max_workers=max_workers) as executor:
+            # Submit only max_workers requests at a time
+            future_to_startindex = {}
+            startindex_iter = iter(startindexes)
+
+            # Initially submit up to max_workers requests
+            for _ in range(min(max_workers, len(startindexes))):
+                idx = next(startindex_iter, None)
+                if idx is not None:
+                    future = executor.submit(fetch_page, idx)
+                    future_to_startindex[future] = idx
+
+            # As each request completes, submit the next one
+            while future_to_startindex:
+                for future in as_completed(future_to_startindex):
+                    idx = future_to_startindex.pop(future)
+                    start_idx, features = future.result()
+                    if features:
+                        results.append((start_idx, features))
+
+                    # Submit the next request if there are any left
+                    next_idx = next(startindex_iter, None)
+                    if next_idx is not None:
+                        new_future = executor.submit(fetch_page, next_idx)
+                        future_to_startindex[new_future] = next_idx
+
+                    # Break to refresh the as_completed iterator
+                    break
+
+        # Sort results by startindex to maintain order
+        results.sort(key=lambda x: x[0])
+
+        # Flatten the list of feature lists
+        all_features = [
+            feature for _, feature_list in results for feature in feature_list
+        ]
+
+        logger.debug("### Fetched %s features total", len(all_features))
         return all_features
 
     def _aggregate_rows(
