@@ -34,6 +34,7 @@ Start/restart superset and continue as described in the [Start the application s
 - choose "Other" at the list of "Supported Databases"
 - insert the SQLAlchemy URI to a WFS `wfs://[...]` (i.e. replace `https://` of your WFS URL with `wfs://`)
 - if the service is secured via BasicAuth, the login details must be entered in the URL and is therefore stored unencrypted (`wfs://username:password@[...]`)
+- the WFS must support GeoJSON output and e.g `outputFormat=application/json` and needs to support EPSG:4326 as coordinate reference system
 - test the connection
 - create a dataset
 - create a chart/dashboard
@@ -75,12 +76,14 @@ Breakpoints set in VS Code are then taken into account.
 ### Start the application
 
 <!-- markdownlint-disable MD033 -->
+
 When in development mode, open <a
   href="http://localhost:8088/"
   target="_blank"
   rel="noopener noreferrer">
-    http://localhost:8088/
-  </a>. Otherwise, please open the corresponding URL to the installed superset instance.
+http://localhost:8088/
+</a>. Otherwise, please open the corresponding URL to the installed superset instance.
+
 <!-- markdownlint-enable MD033 -->
 
 ## Publishing a Development Version to PyPI
@@ -96,21 +99,21 @@ When in development mode, open <a
 
 1. Run the release script with the desired version number (e.g. `0.0.1`):
 
-    ```bash
-    ./release.sh 0.0.1
-    ```
+   ```bash
+   ./release.sh 0.0.1
+   ```
 
-    This will:
+   This will:
 
-    - Update the `version` field in `setup.py`
-    - Commit the change to `main`
-    - Create a Git tag e.g. `0.0.1`
-    - Push the tag to GitHub
+   - Update the `version` field in `setup.py`
+   - Commit the change to `main`
+   - Create a Git tag e.g. `0.0.1`
+   - Push the tag to GitHub
 
 2. The GitHub Actions workflow will be triggered by the tag:
 
-    - It will build the package
-    - Upload it to PyPI
+   - It will build the package
+   - Upload it to PyPI
 
 ### Notes
 
