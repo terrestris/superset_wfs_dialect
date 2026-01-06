@@ -755,6 +755,7 @@ class Cursor:
             "startindex": startindex,
             "method": "POST" if filterXml else "GET",
             "outputFormat": self.connection.wfs_output_format or "application/json",
+            "srsname": "EPSG:4326",
         }
         if filterXml:
             params["filter"] = filterXml
