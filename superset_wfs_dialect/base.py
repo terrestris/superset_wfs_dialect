@@ -395,7 +395,7 @@ class Cursor:
                 limit = self._round_up_to_nearest_power(n=(total_features / 100))
 
         # Calculate the number of requests needed
-        num_requests = math.ceil(total_features / limit)
+        num_requests = math.ceil(total_features / limit) if limit > 0 else 1
         logger.debug("### Will make %s requests with limit %s", num_requests, limit)
 
         # If only one request is needed, fetch directly
