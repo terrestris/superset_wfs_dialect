@@ -1,5 +1,5 @@
 import unittest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch, MagicMock, ANY
 from superset_wfs_dialect.base import Connection, Cursor, AggregationInfo
 from .conftest import create_mock_wfs_instance
 import sqlglot
@@ -31,6 +31,7 @@ class TestConnection(unittest.TestCase):
             password="pass",
             parse_remote_metadata=False,
             timeout=30,
+            auth=ANY,
         )
 
     @patch("superset_wfs_dialect.base.WebFeatureService_2_0_0")

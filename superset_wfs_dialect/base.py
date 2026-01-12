@@ -24,6 +24,7 @@ from owslib.fes2 import (
     PropertyIsNull,
 )
 from owslib.feature.wfs200 import WebFeatureService_2_0_0
+from owslib.util import openURL, Authentication
 
 # from .wkt_parser import WKTParser
 from .sql_logger import SQLLogger
@@ -95,7 +96,11 @@ class Connection:
 
         # Use the correct class for WFS 2.0.0 and only pass valid arguments
         self.wfs: WebFeatureService_2_0_0 = WebFeatureService_2_0_0(
-            **wfs_args, parse_remote_metadata=False, timeout=30
+            **wfs_args,
+            parse_remote_metadata=False,
+            timeout=30,
+            # circumvent OWSLib auth issues
+            auth=Authentication(),
         )
 
         self.wfs_output_format = self._get_output_format()
