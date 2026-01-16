@@ -760,14 +760,23 @@ class Cursor:
             "startindex": startindex,
             "method": "POST" if filterXml else "GET",
             "outputFormat": self.connection.wfs_output_format or "application/json",
-            "srsname": "EPSG:4326",
         }
+        response = None
         if filterXml:
             params["filter"] = filterXml
+            result = wfs.getPOSTGetFeatureRequest(**params)
+            if result is None:
+                raise ValueError("Failed to create POST GetFeature request")
+            url, data = result
+            # data is a xml string and we need to add the srsname to the root element
+            root = ET.fromstring(data)
+            root.set("srsName", "EPSG:4326")
+            data = ET.tostring(root, encoding="utf-8").decode("utf-8")
+            response = openURL(url, data, "POST")
         else:
+            params["srsname"] = "EPSG:4326"
             params["propertyname"] = propertyname
-
-        response = wfs.getfeature(**params)
+            response = wfs.getfeature(**params)
 
         featuresString = response.read().decode("utf-8")
         return orjson.loads(featuresString)
