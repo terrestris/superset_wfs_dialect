@@ -687,7 +687,7 @@ class Cursor:
         """
         base_url = self.connection.base_url
         # TODO: use self.connection.wfs.getfeature() !Does not support resultType!
-        url = f"{base_url}?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&typename={typename}&resultType=hits"
+        url = f"{base_url}?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&typenames={typename}&resultType=hits"
         logger.debug("### Filter XML: %s", filterXml)
         logger.debug("#### URL: %s", url)
         response = None
