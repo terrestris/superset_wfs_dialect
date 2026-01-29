@@ -5,6 +5,7 @@ import sqlglot
 import sqlglot.expressions
 import xml.etree.ElementTree as ET
 import orjson
+from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from typing import Any, Dict, List, Optional, Tuple, TypedDict, Union
@@ -643,8 +644,8 @@ class Cursor:
         """
         base_url = self.connection.base_url
 
-        # TODO: use self.connection.wfs.getcapabilities() !Does not support typename parameter!
-        url = f"{base_url}?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetCapabilities&typename={typename}"
+        # TODO: use self.connection.wfs.getcapabilities() !Does not support typenames parameter!
+        url = f"{base_url}?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetCapabilities&typenames={typename}"
         logger.debug("#### GetCapabilities URL used: %s", url)
         response = requests.get(url)
         if response.status_code == 200:
@@ -687,26 +688,28 @@ class Cursor:
         """
         base_url = self.connection.base_url
         # TODO: use self.connection.wfs.getfeature() !Does not support resultType!
-        url = f"{base_url}?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&typenames={typename}&resultType=hits"
+        # url = f"{base_url}?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&typenames={typename}&resultType=hits"
+        params = {
+            "SERVICE": "WFS",
+            "VERSION": "2.0.0",
+            "REQUEST": "GetFeature",
+            "TYPENAMES": typename,
+            "resultType": "hits",
+        }
         logger.debug("### Filter XML: %s", filterXml)
-        logger.debug("#### URL: %s", url)
+        logger.debug("#### URL: %s", base_url)
         response = None
         if filterXml:
             auth = None
             if self.connection.username and self.connection.password:
                 auth = (self.connection.username, self.connection.password)
-            response = requests.post(
-                url,
-                data=filterXml,
-                headers={"Content-Type": "application/xml"},
-                auth=auth,
-            )
+            params["FILTER"] = filterXml
         else:
             auth = None
             if self.connection.username and self.connection.password:
                 auth = (self.connection.username, self.connection.password)
-            response = requests.get(url, auth=auth)
 
+        response = requests.get(base_url, auth=auth, params=params)
         if response.status_code == 200:
             try:
                 count_ast = ET.fromstring(response.text)
@@ -759,7 +762,6 @@ class Cursor:
             "maxfeatures": limit,
             "startindex": startindex,
             "method": "POST" if filterXml else "GET",
-            "outputFormat": self.connection.wfs_output_format or "application/json",
         }
         response = None
         if filterXml:
@@ -768,14 +770,40 @@ class Cursor:
             if result is None:
                 raise ValueError("Failed to create POST GetFeature request")
             url, data = result
-            # data is a xml string and we need to add the srsname to the root element
+
+            # Ensure outputFormat is set in URL
+            format = self.connection.wfs_output_format or "application/json"
+            parts = urlparse(url)
+            query = dict(parse_qsl(parts.query))
+            query["outputFormat"] = format
+            url = urlunparse(parts._replace(query=urlencode(query)))
+
+            # POST body is not created correctly by OWSLib, so we need to fix it here
             root = ET.fromstring(data)
-            root.set("srsName", "EPSG:4326")
+
+            nsmap = wfs.identification._root.nsmap
+
+            # split typenames on ',' and register every prefix (':') as ns
+            for t in typename.split(","):
+                if ":" in t:
+                    prefix = t.split(":")[0]
+                    ns_url = nsmap.get(prefix, None)
+                    if ns_url:
+                        root.set("xmlns:" + prefix, ns_url)
+
+            # set missing srsName on Query element
+            queryElement = root.find(".//{http://www.opengis.net/wfs/2.0}Query")
+            if queryElement is None:
+                raise ValueError("Failed to find Query element in GetFeature request")
+            queryElement.set("srsName", "EPSG:4326")
             data = ET.tostring(root, encoding="utf-8").decode("utf-8")
             response = openURL(url, data, "POST")
         else:
             params["srsname"] = "EPSG:4326"
             params["propertyname"] = propertyname
+            params["outputFormat"] = (
+                self.connection.wfs_output_format or "application/json"
+            )
             response = wfs.getfeature(**params)
 
         featuresString = response.read().decode("utf-8")
