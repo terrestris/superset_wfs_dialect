@@ -25,7 +25,8 @@ from owslib.fes2 import (
     PropertyIsNull,
 )
 from owslib.feature.wfs200 import WebFeatureService_2_0_0
-from owslib.util import openURL, Authentication
+from owslib.util import Authentication
+from .custom_open_url import openURL
 
 # from .wkt_parser import WKTParser
 from .sql_logger import SQLLogger
@@ -831,7 +832,7 @@ class Cursor:
             if queryElement is None:
                 raise ValueError("Failed to find Query element in GetFeature request")
             queryElement.set("srsName", "EPSG:4326")
-            data = ET.tostring(root, encoding="utf-8").decode("utf-8")
+            data = ET.tostring(root, encoding="utf-8")
             response = openURL(url, data, "POST")
         else:
             params["srsname"] = "EPSG:4326"

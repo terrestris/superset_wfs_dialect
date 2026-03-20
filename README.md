@@ -67,6 +67,42 @@ Start superset with the registered plugin:
 docker compose up -d --build
 ```
 
+### Integrate with a local Superset checkout (editable mode)
+
+If you are developing this dialect together with a local Superset checkout,
+use an editable install inside the Superset container so code changes in this
+repository are picked up immediately.
+
+- Superset is checked out in a sibling directory, e.g.
+  - `../superset`
+  - `../superset_wfs_dialect`
+- Superset is started via Docker Compose in development mode
+
+In the Superset checkout:
+
+1. Mount this repository into the Superset containers (e.g. `/app/superset_wfs_dialect`).
+1. Add this line to `docker/requirements-local.txt`:
+
+   ```txt
+   -e /app/superset_wfs_dialect
+   ```
+
+1. Register the dialect in `docker/pythonpath_dev/superset_config_docker.py`:
+
+   ```python
+   from sqlalchemy.dialects import registry
+   registry.register("wfs", "superset_wfs_dialect.dialect", "WfsDialect")
+   ```
+
+1. Set the `DEBUGGER` env variable for the superset service in superset/docker-compose.yml to `"1"` to enable debugging in the container.
+1. Restart the relevant services, for example:
+
+   ```bash
+   docker compose restart superset superset-worker superset-worker-beat
+   ```
+
+After restart, connect a database in Superset using a `wfs://...` SQLAlchemy URI as described above.
+
 ### Debugging during development
 
 Debugging can be activated via the VS Code during development using `F5`.
@@ -104,14 +140,12 @@ http://localhost:8088/
    ```
 
    This will:
-
    - Update the `version` field in `setup.py`
    - Commit the change to `main`
    - Create a Git tag e.g. `0.0.1`
    - Push the tag to GitHub
 
 2. The GitHub Actions workflow will be triggered by the tag:
-
    - It will build the package
    - Upload it to PyPI
 
