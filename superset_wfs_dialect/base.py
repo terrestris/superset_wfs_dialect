@@ -886,6 +886,8 @@ class Cursor:
         :param is_root: Whether this is the root filter (should be wrapped in a Filter object)
         :return: An OWSLib Filter or related filter expression object
         """
+        expression = self._simplify_filter(expression)
+
         supported_expressions = [
             sqlglot.expressions.EQ,
             sqlglot.expressions.NEQ,
@@ -894,11 +896,13 @@ class Cursor:
             sqlglot.expressions.LT,
             sqlglot.expressions.LTE,
             sqlglot.expressions.And,
+            sqlglot.expressions.Or,
             sqlglot.expressions.In,
             sqlglot.expressions.Not,
             sqlglot.expressions.Paren,
             sqlglot.expressions.Like,
             sqlglot.expressions.Is,
+            sqlglot.expressions.Boolean,
         ]
 
         if not isinstance(expression, tuple(supported_expressions)):
@@ -934,6 +938,16 @@ class Cursor:
         # Handle AND
         elif isinstance(expression, sqlglot.expressions.And):
             filter = And(
+                [
+                    self._get_filter_from_expression(expression.this, is_root=False),
+                    self._get_filter_from_expression(
+                        expression.args["expression"], is_root=False
+                    ),
+                ]
+            )
+        # Handle OR
+        elif isinstance(expression, sqlglot.expressions.Or):
+            filter = Or(
                 [
                     self._get_filter_from_expression(expression.this, is_root=False),
                     self._get_filter_from_expression(
@@ -1016,6 +1030,65 @@ class Cursor:
             raise ValueError("Unsupported filter expression")
 
         return Filter(filter) if is_root else filter
+
+    def _simplify_filter(self, expression: Any) -> Any:
+        """
+        Superset can create patterns like `IN (NULL)` and `1 != 1` for empty
+        list filters. These can produce invalid WFS property references
+        (for example `ValueReference` = `1`) and lead to WFS errors.
+        This pre-processing reduces those special cases to boolean false and
+        simplifies surrounding AND/OR expressions accordingly.
+
+        :param expression: The sqlglot filter expression to simplify
+        :return: The simplified sqlglot expression
+        """
+        if isinstance(expression, sqlglot.expressions.Paren):
+            inner = self._simplify_filter(expression.this)
+            if isinstance(inner, sqlglot.expressions.Boolean):
+                return inner
+            return sqlglot.expressions.Paren(this=inner)
+
+        if isinstance(expression, sqlglot.expressions.In):
+            values = expression.args.get("expressions") or []
+            if values and all(
+                isinstance(value, sqlglot.expressions.Null) for value in values
+            ):
+                return sqlglot.expressions.Boolean(this=False)
+            return expression
+
+        if isinstance(expression, sqlglot.expressions.NEQ):
+            left = expression.this
+            right = expression.args.get("expression")
+            if (
+                isinstance(left, sqlglot.expressions.Literal)
+                and isinstance(right, sqlglot.expressions.Literal)
+                and not left.is_string
+                and not right.is_string
+                and left.this == "1"
+                and right.this == "1"
+            ):
+                return sqlglot.expressions.Boolean(this=False)
+            return expression
+
+        if isinstance(expression, sqlglot.expressions.And):
+            left = self._simplify_filter(expression.this)
+            right = self._simplify_filter(expression.args["expression"])
+            if isinstance(left, sqlglot.expressions.Boolean) and left.this is False:
+                return left
+            if isinstance(right, sqlglot.expressions.Boolean) and right.this is False:
+                return right
+            return sqlglot.expressions.And(this=left, expression=right)
+
+        if isinstance(expression, sqlglot.expressions.Or):
+            left = self._simplify_filter(expression.this)
+            right = self._simplify_filter(expression.args["expression"])
+            if isinstance(left, sqlglot.expressions.Boolean) and left.this is False:
+                return right
+            if isinstance(right, sqlglot.expressions.Boolean) and right.this is False:
+                return left
+            return sqlglot.expressions.Or(this=left, expression=right)
+
+        return expression
 
     def _generate_description(self):
         """

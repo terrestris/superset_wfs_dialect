@@ -13,6 +13,7 @@ from owslib.fes2 import (
     PropertyIsLessThan,
     PropertyIsLike,
     PropertyIsNotEqualTo,
+    PropertyIsNull,
 )
 
 
@@ -130,6 +131,44 @@ class TestGetFilterFromExpression(unittest.TestCase):
         self.assertIsInstance(filter_result.filter.operations[0], PropertyIsEqualTo)
         self.assertEqual(filter_result.filter.operations[0].propertyname, "column")
         self.assertEqual(filter_result.filter.operations[0].literal, "value")
+
+    def test_or_filter(self):
+        expression = sqlglot.parse_one("column1 = 'value1' OR column2 = 'value2'")
+        filter_result = self.cursor._get_filter_from_expression(expression)
+        self.assertIsInstance(filter_result, Filter)
+        self.assertIsInstance(filter_result.filter, Or)
+        self.assertEqual(len(filter_result.filter.operations), 2)
+        self.assertIsInstance(filter_result.filter.operations[0], PropertyIsEqualTo)
+        self.assertEqual(filter_result.filter.operations[0].propertyname, "column1")
+        self.assertEqual(filter_result.filter.operations[0].literal, "value1")
+        self.assertIsInstance(filter_result.filter.operations[1], PropertyIsEqualTo)
+        self.assertEqual(filter_result.filter.operations[1].propertyname, "column2")
+        self.assertEqual(filter_result.filter.operations[1].literal, "value2")
+
+    def test_crossfilter_null_or_expression(self):
+        expression = sqlglot.parse_one(
+            "sperrart IS NULL OR sperrart IN (NULL) AND (1 != 1)"
+        )
+        filter_result = self.cursor._get_filter_from_expression(expression)
+        self.assertIsInstance(filter_result, Filter)
+        self.assertIsInstance(filter_result.filter, PropertyIsNull)
+        self.assertEqual(filter_result.filter.propertyname, "sperrart")
+
+    def test_in_null_simplified_to_false_in_or(self):
+        expression = sqlglot.parse_one("column = 'value' OR column IN (NULL)")
+        filter_result = self.cursor._get_filter_from_expression(expression)
+        self.assertIsInstance(filter_result, Filter)
+        self.assertIsInstance(filter_result.filter, PropertyIsEqualTo)
+        self.assertEqual(filter_result.filter.propertyname, "column")
+        self.assertEqual(filter_result.filter.literal, "value")
+
+    def test_one_neq_one_simplified_to_false_in_or(self):
+        expression = sqlglot.parse_one("column = 'value' OR (1 != 1)")
+        filter_result = self.cursor._get_filter_from_expression(expression)
+        self.assertIsInstance(filter_result, Filter)
+        self.assertIsInstance(filter_result.filter, PropertyIsEqualTo)
+        self.assertEqual(filter_result.filter.propertyname, "column")
+        self.assertEqual(filter_result.filter.literal, "value")
 
 
 if __name__ == "__main__":
