@@ -2,12 +2,14 @@ name: Fehlermeldung
 description: Melden Sie einen Fehler im WFS-Dialekt
 title: "[Bug]: "
 labels: ["bug"]
+assignees: ["Forberig"]
 projects: ["terrestris/1"]
 body:
   - type: markdown
     attributes:
       value: |
         Danke, dass Sie sich die Zeit nehmen, einen Fehler zu melden!
+        /cc @mholthausen @jansule @Forberig
 
   - type: input
     id: version
