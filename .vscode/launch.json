@@ -1,21 +1,29 @@
 {
-    "version": "0.2.0",
-    "configurations": [
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "Python Debugger: run_it",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "run_it.py",
+      "console": "integratedTerminal",
+      "args": "${command:pickArgs}"
+    },
+    {
+      "name": "Python: Remote Attach",
+      "type": "debugpy",
+      "request": "attach",
+      "connect": {
+        "host": "localhost",
+        "port": 5678
+      },
+      "pathMappings": [
         {
-            "name": "Python: Remote Attach",
-            "type": "debugpy",
-            "request": "attach",
-            "connect": {
-                "host": "localhost",
-                "port": 5678
-            },
-            "pathMappings": [
-                {
-                    "localRoot": "${workspaceFolder}/superset_wfs_dialect",
-                    "remoteRoot": "/app/pythonpath/superset_wfs_dialect"
-                }
-            ],
-            "justMyCode": false
+          "localRoot": "${workspaceFolder}/superset_wfs_dialect",
+          "remoteRoot": "/app/pythonpath/superset_wfs_dialect"
         }
-    ]
+      ],
+      "justMyCode": false
+    }
+  ]
 }
