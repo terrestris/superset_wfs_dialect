@@ -177,6 +177,11 @@ class Connection:
                 fmt_lower = fmt.lower()
                 if "application/json" in fmt_lower:
                     return "application/json"
+                # application/geo+json does not seem to work on GeoServer. So we
+                # prefer application/json if both are available, but fall back to
+                # application/geo+json if it's the only one available.
+                if "application/geo+json" in fmt_lower:
+                    preferred = "application/geo+json"
                 if "geojson" in fmt_lower and preferred is None:
                     preferred = "geojson"
 
