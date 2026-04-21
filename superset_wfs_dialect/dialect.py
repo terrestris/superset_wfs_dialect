@@ -1,8 +1,7 @@
 from sqlalchemy.engine.default import DefaultDialect
 from sqlalchemy import types as sqltypes
 from sqlalchemy.dialects import registry
-from .base import FakeDbApi, GEOMETRY_COLUMN_NAME
-import superset_wfs_dialect
+from .base import GEOMETRY_COLUMN_NAME, dbapi as wfs_dbapi
 import logging
 
 logging.basicConfig(level=logging.INFO)
@@ -51,11 +50,11 @@ class WfsDialect(DefaultDialect):
 
     @classmethod
     def dbapi(cls):
-        return superset_wfs_dialect
+        return wfs_dbapi
 
     @classmethod
     def import_dbapi(cls):
-        return FakeDbApi
+        return wfs_dbapi
 
     # TODO use GetCapabilites & DescribeFeatureType
     def get_schema_names(self, connection, **kw):
