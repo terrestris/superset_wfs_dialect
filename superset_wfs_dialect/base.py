@@ -29,11 +29,46 @@ from owslib.util import openURL, Authentication
 
 # from .wkt_parser import WKTParser
 from .sql_logger import SQLLogger
+from .custom_literal_operator import CustomLiteralOperator
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 GEOMETRY_COLUMN_NAME = "geom"
+
+SUPPORTED_EXPRESSIONS = [
+    sqlglot.expressions.EQ,
+    sqlglot.expressions.NEQ,
+    sqlglot.expressions.GT,
+    sqlglot.expressions.GTE,
+    sqlglot.expressions.LT,
+    sqlglot.expressions.LTE,
+    sqlglot.expressions.And,
+    sqlglot.expressions.Or,
+    sqlglot.expressions.In,
+    sqlglot.expressions.Not,
+    sqlglot.expressions.Paren,
+    sqlglot.expressions.Like,
+    sqlglot.expressions.Is,
+]
+
+SQL_GLOT_FES_NAME_MAP = {
+    sqlglot.expressions.EQ: 'fes:PropertyIsEqualTo',
+    sqlglot.expressions.NEQ: 'fes:PropertyIsNotEqualTo',
+    sqlglot.expressions.GT : 'fes:PropertyIsGreaterThan',
+    sqlglot.expressions.GTE: 'fes:PropertyIsGreaterThanOrEqualTo',
+    sqlglot.expressions.LT: 'fes:PropertyIsLessThan',
+    sqlglot.expressions.LTE: 'fes:PropertyIsLessThanOrEqualTo',
+}
+
+SQL_GLOT_FES_MAP = {
+    sqlglot.expressions.EQ: PropertyIsEqualTo,
+    sqlglot.expressions.NEQ: PropertyIsNotEqualTo,
+    sqlglot.expressions.GT : PropertyIsGreaterThan,
+    sqlglot.expressions.GTE: PropertyIsGreaterThanOrEqualTo,
+    sqlglot.expressions.LT: PropertyIsLessThan,
+    sqlglot.expressions.LTE: PropertyIsLessThanOrEqualTo,
+}
 
 
 class Geometry(TypedDict):
@@ -886,22 +921,7 @@ class Cursor:
         :param is_root: Whether this is the root filter (should be wrapped in a Filter object)
         :return: An OWSLib Filter or related filter expression object
         """
-        supported_expressions = [
-            sqlglot.expressions.EQ,
-            sqlglot.expressions.NEQ,
-            sqlglot.expressions.GT,
-            sqlglot.expressions.GTE,
-            sqlglot.expressions.LT,
-            sqlglot.expressions.LTE,
-            sqlglot.expressions.And,
-            sqlglot.expressions.In,
-            sqlglot.expressions.Not,
-            sqlglot.expressions.Paren,
-            sqlglot.expressions.Like,
-            sqlglot.expressions.Is,
-        ]
-
-        if not isinstance(expression, tuple(supported_expressions)):
+        if not isinstance(expression, tuple(SUPPORTED_EXPRESSIONS)):
             raise ValueError(
                 "Unsupported filter expression:", expression.__class__.__name__
             )
@@ -919,6 +939,7 @@ class Cursor:
             )
 
         propertyname = expression.this.name
+        property_is_literal = isinstance(expression.this, sqlglot.expressions.Literal)
 
         if propertyname == GEOMETRY_COLUMN_NAME:
             raise ValueError("Geometry filters are not supported")
@@ -941,6 +962,16 @@ class Cursor:
                     ),
                 ]
             )
+        # Handle OR
+        elif isinstance(expression, sqlglot.expressions.Or):
+            filter = Or(
+                [
+                    self._get_filter_from_expression(expression.this, is_root=False),
+                    self._get_filter_from_expression(
+                        expression.args["expression"], is_root=False
+                    ),
+                ]
+            )
         # Handle NOT
         elif isinstance(expression, sqlglot.expressions.Not):
             inner_expression = expression.this
@@ -951,11 +982,11 @@ class Cursor:
         # Handle equality
         elif isinstance(expression, sqlglot.expressions.EQ):
             literal = expression.args["expression"].name
-            filter = PropertyIsEqualTo(propertyname=propertyname, literal=literal)
+            filter = self._custom_or_builtin_filter(propertyname, literal, sqlglot.expressions.EQ, property_is_literal)
         # Handle inequality
         elif isinstance(expression, sqlglot.expressions.NEQ):
             literal = expression.args["expression"].name
-            filter = PropertyIsNotEqualTo(propertyname=propertyname, literal=literal)
+            filter = self._custom_or_builtin_filter(propertyname, literal, sqlglot.expressions.NEQ, property_is_literal)
         # Handle LIKE
         elif isinstance(expression, sqlglot.expressions.Like):
             matchcase = False
@@ -971,37 +1002,42 @@ class Cursor:
         # Handle greater than
         elif isinstance(expression, sqlglot.expressions.GT):
             literal = expression.args["expression"].name
-            filter = PropertyIsGreaterThan(propertyname=propertyname, literal=literal)
+            filter = self._custom_or_builtin_filter(propertyname, literal, sqlglot.expressions.GT, property_is_literal)
         # Handle greater than or equal
         elif isinstance(expression, sqlglot.expressions.GTE):
             literal = expression.args["expression"].name
-            filter = PropertyIsGreaterThanOrEqualTo(
-                propertyname=propertyname, literal=literal
-            )
+            filter = self._custom_or_builtin_filter(propertyname, literal, sqlglot.expressions.GTE, property_is_literal)
         # Handle less than
         elif isinstance(expression, sqlglot.expressions.LT):
             literal = expression.args["expression"].name
-            filter = PropertyIsLessThan(propertyname=propertyname, literal=literal)
+            filter = self._custom_or_builtin_filter(propertyname, literal, sqlglot.expressions.LT, property_is_literal)
         # Handle less than or equal
         elif isinstance(expression, sqlglot.expressions.LTE):
             literal = expression.args["expression"].name
-            filter = PropertyIsLessThanOrEqualTo(
-                propertyname=propertyname, literal=literal
-            )
+            filter = self._custom_or_builtin_filter(propertyname, literal, sqlglot.expressions.LTE, property_is_literal)
         # Handle in
         elif isinstance(expression, sqlglot.expressions.In):
             literals = [lit.name for lit in expression.args["expressions"]]
-            if len(literals) == 1:
-                filter = PropertyIsEqualTo(
-                    propertyname=propertyname, literal=literals[0]
-                )
+            # In some cases, superset uses an `IN (NULL)` filter, which always evaluates to false in sql-where clauses. Since
+            # FES does not support this structure, we handle this by replacing it with an equivalent static filter that
+            # evaluates to false, i.e. `1 = 2`.
+            values = expression.args.get("expressions") or []
+            if values and all(
+                isinstance(value, sqlglot.expressions.Null) for value in values
+            ):
+                filter = CustomLiteralOperator(SQL_GLOT_FES_NAME_MAP[sqlglot.expressions.EQ], '1', '2')
             else:
-                # Combine multiple IN conditions with OR
-                subfilters = [
-                    PropertyIsEqualTo(propertyname=propertyname, literal=lit)
-                    for lit in literals
-                ]
-                filter = Or(subfilters)
+                if len(literals) == 1:
+                    filter = PropertyIsEqualTo(
+                        propertyname=propertyname, literal=literals[0]
+                    )
+                else:
+                    # Combine multiple IN conditions with OR
+                    subfilters = [
+                        PropertyIsEqualTo(propertyname=propertyname, literal=lit)
+                        for lit in literals
+                    ]
+                    filter = Or(subfilters)
         # Handle IS NULL
         elif isinstance(expression, sqlglot.expressions.Is):
             check_expr = expression.args["expression"]
@@ -1016,6 +1052,13 @@ class Cursor:
             raise ValueError("Unsupported filter expression")
 
         return Filter(filter) if is_root else filter
+
+
+    def _custom_or_builtin_filter(self, property_name, literal, operator_cls, property_is_literal):
+        if property_is_literal:
+            return CustomLiteralOperator(SQL_GLOT_FES_NAME_MAP[operator_cls], property_name, literal)
+        return SQL_GLOT_FES_MAP[operator_cls](propertyname=property_name, literal=literal)
+
 
     def _generate_description(self):
         """

@@ -1,6 +1,7 @@
 import unittest
 from unittest.mock import MagicMock, patch
 from superset_wfs_dialect.base import Cursor, Connection
+from superset_wfs_dialect.custom_literal_operator import CustomLiteralOperator
 from .conftest import create_mock_wfs_instance
 import sqlglot
 from owslib.fes2 import (
@@ -13,6 +14,7 @@ from owslib.fes2 import (
     PropertyIsLessThan,
     PropertyIsLike,
     PropertyIsNotEqualTo,
+    PropertyIsNull,
 )
 
 
@@ -52,6 +54,15 @@ class TestGetFilterFromExpression(unittest.TestCase):
         self.assertEqual(filter_result.filter.propertyname, "column")
         self.assertEqual(filter_result.filter.literal, "value")
 
+    def test_all_literals_equality_filter(self):
+        expression = sqlglot.parse_one("1 = 2")
+        filter_result = self.cursor._get_filter_from_expression(expression)
+        self.assertIsInstance(filter_result, Filter)
+        self.assertIsInstance(filter_result.filter, CustomLiteralOperator)
+        self.assertEqual(filter_result.filter.propertyoperator, "fes:PropertyIsEqualTo")
+        self.assertEqual(filter_result.filter.leftSide, "1")
+        self.assertEqual(filter_result.filter.rightSide, "2")
+
     def test_inequality_filter(self):
         expression = sqlglot.parse_one("column != 'value'")
         filter_result = self.cursor._get_filter_from_expression(expression)
@@ -89,6 +100,14 @@ class TestGetFilterFromExpression(unittest.TestCase):
         self.assertIsInstance(subfilters[1], PropertyIsEqualTo)
         self.assertEqual(subfilters[1].propertyname, "column")
         self.assertEqual(subfilters[1].literal, "value2")
+
+    def test_in_null_filter(self):
+        expression = sqlglot.parse_one("column IN (null)")
+        filter_result = self.cursor._get_filter_from_expression(expression)
+        self.assertIsInstance(filter_result.filter, CustomLiteralOperator)
+        self.assertEqual(filter_result.filter.propertyoperator, "fes:PropertyIsEqualTo")
+        self.assertEqual(filter_result.filter.leftSide, "1")
+        self.assertEqual(filter_result.filter.rightSide, "2")
 
     def test_like_filter_case_sensitive(self):
         expression = sqlglot.parse_one("column LIKE 'value%'")
@@ -130,6 +149,51 @@ class TestGetFilterFromExpression(unittest.TestCase):
         self.assertIsInstance(filter_result.filter.operations[0], PropertyIsEqualTo)
         self.assertEqual(filter_result.filter.operations[0].propertyname, "column")
         self.assertEqual(filter_result.filter.operations[0].literal, "value")
+
+    def test_or_filter(self):
+        expression = sqlglot.parse_one("column1 = 'value1' OR column2 = 'value2'")
+        filter_result = self.cursor._get_filter_from_expression(expression)
+        self.assertIsInstance(filter_result, Filter)
+        self.assertIsInstance(filter_result.filter, Or)
+        self.assertEqual(len(filter_result.filter.operations), 2)
+        self.assertIsInstance(filter_result.filter.operations[0], PropertyIsEqualTo)
+        self.assertEqual(filter_result.filter.operations[0].propertyname, "column1")
+        self.assertEqual(filter_result.filter.operations[0].literal, "value1")
+        self.assertIsInstance(filter_result.filter.operations[1], PropertyIsEqualTo)
+        self.assertEqual(filter_result.filter.operations[1].propertyname, "column2")
+        self.assertEqual(filter_result.filter.operations[1].literal, "value2")
+
+    def test_is_null_filter(self):
+        expression = sqlglot.parse_one("sperrart IS NULL")
+        filter_result = self.cursor._get_filter_from_expression(expression)
+        self.assertIsInstance(filter_result, Filter)
+        self.assertIsInstance(filter_result.filter, PropertyIsNull)
+        self.assertEqual(filter_result.filter.propertyname, "sperrart")
+
+    def test_crossfilter_null_or_expression(self):
+        expression = sqlglot.parse_one(
+            "sperrart IS NULL OR sperrart IN (NULL) AND (1 != 1)"
+        )
+        filter_result = self.cursor._get_filter_from_expression(expression)
+        self.assertIsInstance(filter_result, Filter)
+        self.assertIsInstance(filter_result.filter, Or)
+        self.assertEqual(len(filter_result.filter.operations), 2)
+
+        self.assertIsInstance(filter_result.filter.operations[0], PropertyIsNull)
+        self.assertEqual(filter_result.filter.operations[0].propertyname, "sperrart")
+
+        self.assertIsInstance(filter_result.filter.operations[1], And)
+        self.assertEqual(len(filter_result.filter.operations[1].operations), 2)
+
+        self.assertIsInstance(filter_result.filter.operations[1].operations[0], CustomLiteralOperator)
+        self.assertEqual(filter_result.filter.operations[1].operations[0].propertyoperator, "fes:PropertyIsEqualTo")
+        self.assertEqual(filter_result.filter.operations[1].operations[0].leftSide, "1")
+        self.assertEqual(filter_result.filter.operations[1].operations[0].rightSide, "2")
+
+        self.assertIsInstance(filter_result.filter.operations[1].operations[1], CustomLiteralOperator)
+        self.assertEqual(filter_result.filter.operations[1].operations[1].propertyoperator, "fes:PropertyIsNotEqualTo")
+        self.assertEqual(filter_result.filter.operations[1].operations[1].leftSide, "1")
+        self.assertEqual(filter_result.filter.operations[1].operations[1].rightSide, "1")
 
 
 if __name__ == "__main__":
