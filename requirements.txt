@@ -10,3 +10,4 @@ orjson>=3.11.4
 # Dependencies provided by superset, so we do not specify a version here
 flask_babel
 marshmallow
+apispec

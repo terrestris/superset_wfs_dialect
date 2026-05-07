@@ -30,6 +30,13 @@ class WfsDialect(DefaultDialect):
     supports_alter = False
     supports_unicode_statements = True
     supports_statement_cache = False
+    oauth2_client = None
+
+    def __init__(self, oauth2_client=None, **kwargs):
+        super().__init__(**kwargs)
+        if oauth2_client is not None:
+            self.oauth2_client = oauth2_client
+
 
     def create_connect_args(self, url):
         scheme = "https"
@@ -45,6 +52,8 @@ class WfsDialect(DefaultDialect):
         if username and password:
             connect_args["username"] = username
             connect_args["password"] = password
+        if self.oauth2_client is not None:
+            connect_args["oauth2_client"] = self.oauth2_client
 
         return [], connect_args
 
