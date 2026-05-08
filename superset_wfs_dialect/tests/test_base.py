@@ -10,9 +10,7 @@ from typing import List
 
 class TestConnection(unittest.TestCase):
     @patch("superset_wfs_dialect.base.WebFeatureService_2_0_0")
-    @patch("superset_wfs_dialect.base.requests.get")
-    def test_connection_initialization(self, mock_requests, mock_wfs):
-        mock_requests.return_value = MagicMock(status_code=200)
+    def test_connection_initialization(self, mock_wfs):
         mock_wfs.return_value = create_mock_wfs_instance()
 
         conn = Connection(
@@ -29,8 +27,6 @@ class TestConnection(unittest.TestCase):
             version="2.0.0",
             username="user",
             password="pass",
-            parse_remote_metadata=False,
-            timeout=30,
             auth=ANY,
         )
 
@@ -45,9 +41,7 @@ class TestConnection(unittest.TestCase):
 
 class TestCursor(unittest.TestCase):
     @patch("superset_wfs_dialect.base.WebFeatureService_2_0_0")
-    @patch("superset_wfs_dialect.base.requests.get")
-    def test_execute_dummy_query(self, mock_requests, mock_wfs):
-        mock_requests.return_value = MagicMock(status_code=200)
+    def test_execute_dummy_query(self, mock_wfs):
         mock_wfs.return_value = create_mock_wfs_instance()
 
         conn = Connection()
@@ -62,9 +56,7 @@ class TestCursor(unittest.TestCase):
 
     @patch("superset_wfs_dialect.base.sqlglot.parse_one")
     @patch("superset_wfs_dialect.base.WebFeatureService_2_0_0")
-    @patch("superset_wfs_dialect.base.requests.get")
-    def test_execute_invalid_query(self, mock_requests, mock_wfs, mock_parse_one):
-        mock_requests.return_value = MagicMock(status_code=200)
+    def test_execute_invalid_query(self, mock_wfs, mock_parse_one):
         mock_wfs.return_value = create_mock_wfs_instance()
         mock_parse_one.side_effect = ValueError("Invalid SQL query")
 

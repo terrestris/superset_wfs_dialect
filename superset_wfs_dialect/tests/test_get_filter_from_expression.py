@@ -21,12 +21,9 @@ from owslib.fes2 import (
 class TestGetFilterFromExpression(unittest.TestCase):
     def setUp(self):
         self.patcher_wfs = patch("superset_wfs_dialect.base.WebFeatureService_2_0_0")
-        self.patcher_requests = patch("superset_wfs_dialect.base.requests.get")
 
         mock_wfs = self.patcher_wfs.start()
-        mock_requests = self.patcher_requests.start()
 
-        mock_requests.return_value = MagicMock(status_code=200)
         mock_wfs.return_value = create_mock_wfs_instance()
 
         self.connection = Connection(
@@ -44,7 +41,6 @@ class TestGetFilterFromExpression(unittest.TestCase):
 
     def tearDown(self):
         self.patcher_wfs.stop()
-        self.patcher_requests.stop()
 
     def test_equality_filter(self):
         expression = sqlglot.parse_one("column = 'value'")
