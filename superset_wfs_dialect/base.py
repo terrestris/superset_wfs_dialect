@@ -115,11 +115,13 @@ class Connection:
         base_url="https://localhost/geoserver/ows",
         username=None,
         password=None,
+        oauth2_client=None,
         max_workers=5,
     ):
         self.base_url = base_url
         self.username = username
         self.password = password
+        self.oauth2_client= oauth2_client
         self.feature_type_schemas = {}
         self.server_info = {}
         self.wfs_output_format = None
@@ -1160,7 +1162,8 @@ def connect(*args, **kwargs):
     base_url = kwargs.get("base_url", "https://localhost/geoserver/ows")
     username = kwargs.get("username")
     password = kwargs.get("password")
-    return Connection(base_url=base_url, username=username, password=password)
+    oauth2_client = kwargs.get("oauth2_client")
+    return Connection(base_url=base_url, username=username, password=password, oauth2_client=oauth2_client)
 
 
 class FakeDbApi:
