@@ -20,6 +20,9 @@ setup(
         "sqlalchemy.dialects": [
             "wfs = superset_wfs_dialect.dialect:WfsDialect",
         ],
+        "superset.db_engine_specs": [
+            "wfs = superset_wfs_dialect.engine_spec:WfsEngineSpec",
+        ],
     },
     python_requires=">=3.10",
 )

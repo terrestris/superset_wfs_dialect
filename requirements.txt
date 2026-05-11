@@ -6,3 +6,7 @@ lxml>=5.4.0
 OWSLib>=0.34.0
 pyproj>=3.7.1
 orjson>=3.11.4
+
+# Dependencies provided by superset, so we do not specify a version here
+flask_babel
+marshmallow
