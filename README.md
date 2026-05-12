@@ -34,7 +34,7 @@ Start/restart superset and continue as described in the [Start the application s
 - select "OGC WFS" at the list of "Supported Databases"
 - insert the WFS URL into the `host` field (e.g. `https://example.com/geoserver/wfs`)
 - if the service is secured via BasicAuth, add username and password via the provided fields
-- if the service is secured via OIDC/OAUTH2, add the required paramaters into the `OAuth2 client information` section
+- if the service is secured via OIDC/OAUTH2, add the required parameters into the `OAuth2 client information` section
     - required fields: `Client ID`, `Client Secret`, `Token Request URI`
     - optional fields: `Scopes`
     - fields to ignore: `Authorization Request URI` (added by superset but not needed for the client credentials flow)
