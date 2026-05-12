@@ -1,11 +1,9 @@
-import requests
 import math
 import logging
 import sqlglot
 import sqlglot.expressions
 import xml.etree.ElementTree as ET
 import orjson
-from urllib.parse import urlparse, urlunparse, parse_qsl, urlencode
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from typing import Any, Dict, List, Optional, Tuple, TypedDict, Union
@@ -24,13 +22,13 @@ from owslib.fes2 import (
     PropertyIsNotEqualTo,
     PropertyIsNull,
 )
-from owslib.feature.wfs200 import WebFeatureService_2_0_0
 from owslib.util import Authentication
 from .custom_open_url import openURL
 
-# from .wkt_parser import WKTParser
 from .sql_logger import SQLLogger
 from .custom_literal_operator import CustomLiteralOperator
+from .custom_wfs200 import WebFeatureService_2_0_0
+from .wfs_oauth import WfsOauth
 
 logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
@@ -121,27 +119,28 @@ class Connection:
         self.base_url = base_url
         self.username = username
         self.password = password
-        self.oauth2_client= oauth2_client
         self.feature_type_schemas = {}
         self.server_info = {}
         self.wfs_output_format = None
         self.max_workers = max_workers
+        self.oauth2_client_info = oauth2_client
 
         wfs_args = {"url": base_url, "version": "2.0.0"}
 
-        if username and password:
-            wfs_args["username"] = username
-            wfs_args["password"] = password
+        self.use_oidc = oauth2_client is not None
+        if self.use_oidc:
+            self.wfs = WfsOauth(**wfs_args, oauth_info=oauth2_client)
+        else:
+            if username and password:
+                wfs_args["username"] = username
+                wfs_args["password"] = password
+            self.wfs = WebFeatureService_2_0_0(
+                **wfs_args,
+                # circumvent OWSLib auth issues
+                auth=Authentication(),
+            )
 
-        # Use the correct class for WFS 2.0.0 and only pass valid arguments
-        self.wfs: WebFeatureService_2_0_0 = WebFeatureService_2_0_0(
-            **wfs_args,
-            parse_remote_metadata=False,
-            timeout=30,
-            # circumvent OWSLib auth issues
-            auth=Authentication(),
-        )
-
+        self.server_side_max_features = self._get_server_side_max_features()
         self.wfs_output_format = self._get_output_format()
 
         # Initial DescribeFeatureType for all available layers
@@ -206,6 +205,28 @@ class Connection:
         for feature_type in self.wfs.contents:
             schema = self.wfs.get_schema(typename=feature_type)
             self.feature_type_schemas[feature_type] = schema
+
+    def _get_server_side_max_features(self) -> int:
+        """
+        Gets the server-side maximum number of features for a given typename
+        from the WFS GetCapabilities document.
+
+        :param typename: The WFS typename (layer).
+        :return: The maximum number of features as an integer, or None if not found.
+        """
+        count_default_element = self.wfs._capabilities.find(
+            ".//ows:Constraint[@name='CountDefault']/ows:DefaultValue",
+            namespaces={"ows": "http://www.opengis.net/ows/1.1"},
+        )
+        if count_default_element is None:
+            logger.error("Error when getting the CountDefault elements")
+            return 0
+
+        count_default = (
+            int(count_default_element.text) if count_default_element.text else 0
+        )
+        logger.info("Maximum number of features: %s", count_default)
+        return count_default
 
 
 class Cursor:
@@ -425,10 +446,6 @@ class Cursor:
         # and then aggregate them in Python
         limit = 10000
 
-        # fetch as many features as possible with one request
-        server_side_maxfeatures = self._get_server_side_max_features(typename=typename)
-        logger.debug("### Server-side maximum features: %s", server_side_maxfeatures)
-
         # Get the total number of features to calculate the number of requests needed
         total_features = self._get_feature_count(typename=typename, filterXml=filterXml)
         logger.debug("### Total features available: %s", total_features)
@@ -436,8 +453,9 @@ class Cursor:
         if total_features == 0:
             return []
 
-        if server_side_maxfeatures is not None:
-            limit = server_side_maxfeatures
+        # fetch as many features as possible with one request
+        if self.connection.server_side_max_features is not None:
+            limit = self.connection.server_side_max_features
         else:
             if total_features / limit > 100:
                 # reduce requests if there are too many features to never reach 100 requests
@@ -677,46 +695,6 @@ class Cursor:
         else:
             return 10 * base
 
-    def _get_server_side_max_features(self, typename: str) -> int:
-        """
-        Gets the server-side maximum number of features for a given typename
-        from the WFS GetCapabilities response.
-
-        :param typename: The WFS typename (layer).
-        :return: The maximum number of features as an integer, or None if not found.
-        """
-        base_url = self.connection.base_url
-
-        # TODO: use self.connection.wfs.getcapabilities() !Does not support typenames parameter!
-        url = f"{base_url}?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetCapabilities&typenames={typename}"
-        logger.debug("#### GetCapabilities URL used: %s", url)
-        response = requests.get(url)
-        if response.status_code == 200:
-            try:
-                capabilities_ast = ET.fromstring(response.text)
-            except ET.ParseError as e:
-                logger.error("Error when parsing the WFS response: %s", e)
-                raise ValueError("Error when parsing the WFS response")
-
-            # this is version 2.0.0 specific and could be different in 1.1.0
-            count_default_element = capabilities_ast.find(
-                ".//ows:Constraint[@name='CountDefault']/ows:DefaultValue",
-                namespaces={"ows": "http://www.opengis.net/ows/1.1"},
-            )
-            if count_default_element is None:
-                logger.error("Error when fetching the CountDefault elements")
-                return 0
-
-            count_default = (
-                int(count_default_element.text) if count_default_element.text else 0
-            )
-            logger.info("Maximum number of features: %s", count_default)
-            return count_default
-        else:
-            raise ValueError(
-                f"Error when requesting the WFS capabilities: {response.status_code}"
-            )
-
     def _get_feature_count(
         self,
         typename: str,
@@ -729,45 +707,20 @@ class Cursor:
         :param filterXml: Optional WFS Filter XML to apply to the request.
         :return: The number of features as an integer.
         """
-        base_url = self.connection.base_url
-        # TODO: use self.connection.wfs.getfeature() !Does not support resultType!
-        # url = f"{base_url}?SERVICE=WFS&VERSION=2.0.0&REQUEST=GetFeature&typenames={typename}&resultType=hits"
-        params = {
-            "SERVICE": "WFS",
-            "VERSION": "2.0.0",
-            "REQUEST": "GetFeature",
-            "TYPENAMES": typename,
-            "resultType": "hits",
-        }
-        logger.debug("### Filter XML: %s", filterXml)
-        logger.debug("#### URL: %s", base_url)
-        response = None
-        if filterXml:
-            auth = None
-            if self.connection.username and self.connection.password:
-                auth = (self.connection.username, self.connection.password)
-            params["FILTER"] = filterXml
-        else:
-            auth = None
-            if self.connection.username and self.connection.password:
-                auth = (self.connection.username, self.connection.password)
+        response = self.connection.wfs.getfeature(
+            typename=typename, result_type="hits", filter=filterXml
+        )
+        response_text = response.read()
 
-        response = requests.get(base_url, auth=auth, params=params)
-        if response.status_code == 200:
-            try:
-                count_ast = ET.fromstring(response.text)
-            except ET.ParseError as e:
-                logger.error("Error while parsing the WFS answer: %s", e)
-                raise ValueError("Error while parsing the WFS answer")
+        try:
+            count_ast = ET.fromstring(response_text)
+        except ET.ParseError as e:
+            logger.error("Error while parsing the WFS answer: %s", e)
+            raise ValueError("Error while parsing the WFS answer")
 
-            count = int(count_ast.attrib["numberMatched"])
-            logger.info("Number of features: %s", count)
-            return count
-
-        else:
-            raise ValueError(
-                f"Error when requesting the number of features: {response.status_code}"
-            )
+        count = int(count_ast.attrib["numberMatched"])
+        logger.info("Number of features: %s", count)
+        return count
 
     def _get_FeatureCollection(
         self,
@@ -805,50 +758,20 @@ class Cursor:
             "maxfeatures": limit,
             "startindex": startindex,
             "method": "POST" if filterXml else "GET",
+            "srsname": "EPSG:4326",
+            "outputFormat": (
+                self.connection.wfs_output_format or "application/json"
+            ),
         }
-        response = None
         if filterXml:
             params["filter"] = filterXml
-            result = wfs.getPOSTGetFeatureRequest(**params)
-            if result is None:
-                raise ValueError("Failed to create POST GetFeature request")
-            url, data = result
-
-            # Ensure outputFormat is set in URL
-            format = self.connection.wfs_output_format or "application/json"
-            parts = urlparse(url)
-            query = dict(parse_qsl(parts.query))
-            query["outputFormat"] = format
-            url = urlunparse(parts._replace(query=urlencode(query)))
-
-            # POST body is not created correctly by OWSLib, so we need to fix it here
-            root = ET.fromstring(data)
-
-            nsmap = wfs.identification._root.nsmap
-
-            # split typenames on ',' and register every prefix (':') as ns
-            for t in typename.split(","):
-                if ":" in t:
-                    prefix = t.split(":")[0]
-                    ns_url = nsmap.get(prefix, None)
-                    if ns_url:
-                        root.set("xmlns:" + prefix, ns_url)
-
-            # set missing srsName on Query element
-            queryElement = root.find(".//{http://www.opengis.net/wfs/2.0}Query")
-            if queryElement is None:
-                raise ValueError("Failed to find Query element in GetFeature request")
-            queryElement.set("srsName", "EPSG:4326")
-            data = ET.tostring(root, encoding="utf-8")
-            response = openURL(url, data, "POST")
         else:
-            params["srsname"] = "EPSG:4326"
+            # It is unclear, why the propertyname is not included in the request
+            # that contains a filter. This should be checked.
+            # TODO check, why propertyname is not included if filterXml is provided.
             params["propertyname"] = propertyname
-            params["outputFormat"] = (
-                self.connection.wfs_output_format or "application/json"
-            )
-            response = wfs.getfeature(**params)
 
+        response = wfs.getfeature(**params)
         featuresString = response.read().decode("utf-8")
         return orjson.loads(featuresString)
 

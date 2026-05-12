@@ -31,11 +31,14 @@ Start/restart superset and continue as described in the [Start the application s
 ## Add a WFS database connection
 
 - select Data > Connect database in the submenu
-- choose "Other" at the list of "Supported Databases"
-- insert the SQLAlchemy URI to a WFS `wfs://[...]` (i.e. replace `https://` of your WFS URL with `wfs://`)
-- if the service is secured via BasicAuth, the login details must be entered in the URL and is therefore stored unencrypted (`wfs://username:password@[...]`)
-- the WFS must support GeoJSON output and e.g `outputFormat=application/json` and needs to support EPSG:4326 as coordinate reference system
-- test the connection
+- select "OGC WFS" at the list of "Supported Databases"
+- insert the WFS URL into the `host` field (e.g. `https://example.com/geoserver/wfs`)
+- if the service is secured via BasicAuth, add username and password via the provided fields
+- if the service is secured via OIDC/OAUTH2, add the required parameters into the `OAuth2 client information` section
+    - required fields: `Client ID`, `Client Secret`, `Token Request URI`
+    - optional fields: `Scopes`
+    - fields to ignore: `Authorization Request URI` (added by superset but not needed for the client credentials flow)
+- the WFS must support GeoJSON output (e.g `outputFormat=application/json`), and needs to support EPSG:4326 as coordinate reference system
 - create a dataset
 - create a chart/dashboard
 

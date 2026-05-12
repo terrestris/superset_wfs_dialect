@@ -11,3 +11,4 @@ orjson>=3.11.4
 flask_babel
 marshmallow
 apispec
+authlib
