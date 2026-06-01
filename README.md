@@ -30,7 +30,8 @@ Start/restart superset and continue as described in the [Start the application s
 
 ## Add a WFS database connection
 
-- select Data > Connect database in the submenu
+- select Settings > Database Connections in the submenu
+- Click "+ Database"
 - select "OGC WFS" at the list of "Supported Databases"
 - insert the WFS URL into the `host` field (e.g. `https://example.com/geoserver/wfs`)
 - if the service is secured via BasicAuth, add username and password via the provided fields
