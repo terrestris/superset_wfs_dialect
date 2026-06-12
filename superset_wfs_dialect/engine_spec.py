@@ -1,4 +1,5 @@
 from typing import Any, TypedDict
+from urllib.parse import urlparse, parse_qs
 
 from apispec import APISpec
 from apispec.ext.marshmallow import MarshmallowPlugin
@@ -94,14 +95,21 @@ class WfsEngineSpec(WfsParametersMixin, BaseEngineSpec):
         parameters: WfsParametersType,
         encrypted_extra: dict[str, str] | None = None,
     ) -> str:
-        host = parameters["host"].replace("http://", "").replace("https://", "").replace("wfs://", "")
+        raw = parameters["host"]
+        parsed = urlparse(raw)
+
+        ignored_query_keys = ["service", "version", "request"]
+        query = {k: v for k, v in parse_qs(parsed.query).items() if k.lower() not in ignored_query_keys}
 
         return str(
             URL.create(
                 "wfs",
                 username=parameters.get("username"),
                 password=parameters.get("password"),
-                host=host,
+                host=parsed.hostname,
+                port=parsed.port,
+                database=parsed.path.lstrip("/"),
+                query=query,
             )
         )
 
@@ -110,7 +118,13 @@ class WfsEngineSpec(WfsParametersMixin, BaseEngineSpec):
         cls, uri: str, encrypted_extra: dict[str, Any] | None = None
     ) -> WfsParametersType:
         url = make_url_safe(uri)
-        cleaned_url = URL.create("wfs", host=url.host, database=url.database)
+        cleaned_url = URL.create(
+                "https",
+                host=url.host,
+                port=url.port,
+                database=url.database,
+                query=url.query
+            )
 
         return {
             "username": url.username,
