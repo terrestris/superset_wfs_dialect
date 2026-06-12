@@ -15,6 +15,7 @@ class TestWfsDialect(unittest.TestCase):
         url.database = "testdb"
         url.username = "user"
         url.password = "pass"
+        url.set.return_value = "https://example.com:8080/testdb"
 
         expected_args = (
             [],
