@@ -113,7 +113,7 @@ class Connection:
         base_url="https://localhost/geoserver/ows",
         username=None,
         password=None,
-        oauth2_client=None,
+        oauth2_client_info=None,
         max_workers=5,
     ):
         self.base_url = base_url
@@ -123,13 +123,13 @@ class Connection:
         self.server_info = {}
         self.wfs_output_format = None
         self.max_workers = max_workers
-        self.oauth2_client_info = oauth2_client
+        self.oauth2_client_info = oauth2_client_info
 
         wfs_args = {"url": base_url, "version": "2.0.0"}
 
-        self.use_oidc = oauth2_client is not None
+        self.use_oidc = oauth2_client_info is not None
         if self.use_oidc:
-            self.wfs = WfsOauth(**wfs_args, oauth_info=oauth2_client)
+            self.wfs = WfsOauth(**wfs_args, oauth_info=oauth2_client_info)
         else:
             if username and password:
                 wfs_args["username"] = username
@@ -1085,8 +1085,13 @@ def connect(*args, **kwargs):
     base_url = kwargs.get("base_url", "https://localhost/geoserver/ows")
     username = kwargs.get("username")
     password = kwargs.get("password")
-    oauth2_client = kwargs.get("oauth2_client")
-    return Connection(base_url=base_url, username=username, password=password, oauth2_client=oauth2_client)
+    oauth2_client_info = kwargs.get("oauth2_client_info")
+    return Connection(
+        base_url=base_url,
+        username=username,
+        password=password,
+        oauth2_client_info=oauth2_client_info,
+    )
 
 
 class FakeDbApi:

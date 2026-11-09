@@ -12,8 +12,6 @@ from superset.databases.schemas import encrypted_field_properties, EncryptedStri
 from superset.db_engine_specs.base import BaseEngineSpec, BasicParametersMixin
 from superset.errors import ErrorLevel, SupersetError, SupersetErrorType
 
-from superset.models.core import Database
-
 ma_plugin = MarshmallowPlugin()
 
 
@@ -25,15 +23,12 @@ class WfsParametersSchema(Schema):
     host = fields.String(
         required=True, metadata={"description": __("WFS URL")}
     )
-    # This will create the oauth2 form fields in the UI. However, data
-    # is passed back as `oauth2_client_info` in the encrypted_extra. So
-    # we have to be careful when to use which name.
-    oauth2_client = EncryptedString(
+    # The Superset frontend renders the OAuth2 form only for a property with
+    # exactly this name, and stores its value in the encrypted_extra.
+    oauth2_client_info = EncryptedString(
         required=False,
-        metadata={
-            "description": __("OAuth2 client info"),
-            "field_name": "oauth2_client_info",
-        },
+        allow_none=True,
+        metadata={"description": __("OAuth2 client info")},
     )
 
 
@@ -41,7 +36,7 @@ class WfsParametersType(TypedDict, total=False):
     username: str | None
     password: str | None
     host: str
-    oauth2_client: str | None
+    oauth2_client_info: str | None
 
 
 class WfsPropertiesType(TypedDict):
@@ -131,20 +126,6 @@ class WfsEngineSpec(WfsParametersMixin, BaseEngineSpec):
             "password": url.password,
             "host": str(cleaned_url),
         }
-
-    @staticmethod
-    def update_params_from_encrypted_extra(
-        database: Database,
-        params: dict[str, Any],
-    ) -> None:
-        """
-        Rename `oauth2_client_info` to `oauth2_client` to pass validation.
-        """
-        BaseEngineSpec.update_params_from_encrypted_extra(database, params)
-
-        if "oauth2_client_info" in params:
-            params["oauth2_client"] = params.pop("oauth2_client_info")
-
 
     @classmethod
     def parameters_json_schema(cls) -> Any:

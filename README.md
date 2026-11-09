@@ -7,6 +7,10 @@
 
 SQLAlchemy dialect for OGC WFS as a Superset plugin.
 
+Compatible with Apache Superset 6.x (Versions >0.0.15).
+
+Compatible with Apache Superset 5.x (Versions <=0.0.15).
+
 ## Register the dialect
 
 Create a `requirements-local.txt` file according to the
@@ -47,9 +51,8 @@ Start/restart superset and continue as described in the [Start the application s
 
 ### Prerequisites for development
 
-- Docker Engine >= version 28
 - python >= version 3.10.12
-- Checkout this project
+- Checkout of this project
 
 ### Installation
 
@@ -64,12 +67,6 @@ pip install -e .
 **or** create a virtual environment via VS Code:
 
 <https://code.visualstudio.com/docs/python/python-tutorial#_create-a-virtual-environment>.
-
-Start superset with the registered plugin:
-
-```bash
-docker compose up -d --build
-```
 
 ### Integrate with a local Superset checkout (editable mode)
 
@@ -109,6 +106,15 @@ After restart, connect a database in Superset using a `wfs://...` SQLAlchemy URI
 
 ### Debugging during development
 
+For interactive debugging in the local Superset checkout, make
+sure that superset opens the debug port for the debugger to attach.
+
+E.g.
+
+```sh
+python -m debugpy --listen 0.0.0.0:5678 -m flask run -p 8088 --host=0.0.0.0 --reload --debugger
+```
+
 Debugging can be activated via the VS Code during development using `F5`.
 Please note that the Python interpreter is selected from the previously created venv.
 Breakpoints set in VS Code are then taken into account.
@@ -126,7 +132,7 @@ http://localhost:8088/
 
 <!-- markdownlint-enable MD033 -->
 
-## Publishing a Development Version to PyPI
+## Publishing a Version to PyPI
 
 ### Requirements
 

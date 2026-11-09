@@ -1,14 +1,15 @@
-sqlalchemy==1.4.49
 requests>=2.32.3
-sqlglot>=21.0.0
-debugpy>=1.8.14
 lxml>=5.4.0
 OWSLib>=0.34.0
 pyproj>=3.7.1
 orjson>=3.11.4
 
-# Dependencies provided by superset, so we do not specify a version here
+# Provided by superset, version ranges must match superset's pins
+sqlalchemy>=1.4,<2
+sqlglot>=28.10.0,<29
 flask_babel
 marshmallow
 apispec
+
+# Only in superset's development requirements, not in its base image
 authlib
